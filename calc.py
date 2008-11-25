@@ -6,10 +6,9 @@ from pprint import pprint
 from pyparsing import ParseException
 import itertools
 import logging
-import matplotlib
 import sys
 
-playernames_by_steamid = {}
+playernames = {}
 def most_common_player_names(playernames_by_steamid):
     """return a dictionary containing the most common playername used
     by each steamid, given the list of playernames used by each
@@ -68,7 +67,7 @@ class GameTracker(object):
             # Collect all steamid--playername associations for
             # canonical naming.
             if result.steamid:
-                playernames_by_steamid.setdefault(result.steamid,[]).append(result.playername)
+                playernames.setdefault(result.steamid,[]).append(result.playername)
 
             timestamp = datetime.strptime(result.timestamp, '%m/%d/%Y - %H:%M:%S:')
 
