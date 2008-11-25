@@ -50,12 +50,13 @@ class GameTracker(object):
         self.current_map = 'pl_goldrush'
         self.current_point = 0
 
-        # Record of all point-player scores.  This will include the score
-        # for all points across all supported maps, even though SVD may be
-        # run separately for separate maps.  Keys are tuples --- (mapname,
-        # point_number, steamid, teamname ('Red' or 'Blue')).  Maps to
-        # floating point scores.
-        self.scores = defaultdict(float)
+        # Record of all point-player scores.  Scores are stored as
+        # 2-tuples of floats, successes and attempts.  This score dict
+        # will include the score for all points across all supported
+        # maps, even though SVD may be run separately for separate
+        # maps.  Keys are tuples --- (mapname, point_number, steamid,
+        # teamname ('Red' or 'Blue')).  Maps to floating point scores.
+        self.scores = defaultdict(lambda: (0.0,0.0))
 
     def processLogFile(self, filename):
         for line in file(filename):
@@ -99,7 +100,7 @@ class GameTracker(object):
             # everyone on red.
             if result.pointcaptured:
                 logging.info("Blue capped '%s' point %d" % (self.current_map, self.current_point))
-                self.update_scores(timestamp, {'Red':-1, 'Blue':1})
+                self.update_scores(timestamp, ('Blue', 'Red'))
                 self.current_point += 1
                 logging.debug("Current point now '%s' #%d" % (self.current_map, self.current_point))
 
@@ -107,7 +108,7 @@ class GameTracker(object):
             # on blue.
             if result.roundend:
                 if result.winner == 'Red':
-                    self.update_scores(timestamp, {'Red':1, 'Blue':-1})
+                    self.update_scores(timestamp, ('Red', 'Blue'))
                 else:
                     # Blue's scores were already updated when they
                     # triggered pointcaptured
@@ -119,10 +120,13 @@ class GameTracker(object):
             if result.roundstart or result.pointcaptured:
                 self.most_recent_round_start = timestamp
 
-    def update_scores(self, time_of_event, team_sign):
+    def update_scores(self, time_of_event, (winner, loser)):
         time_taken = time_of_event - self.most_recent_round_start
 
-        def generate_awards():
+        def generate_attempts():
+            """Generate tuples representing the responsibility of
+            every player involved in the event leading to this update
+            of scores."""
             for (steamid, (teamname, join_time)) in self.roster.items():
                 yield (steamid, teamname, join_time, time_of_event)
             for (steamid, teamname, join_time, part_time) in self.liabilities:
@@ -130,15 +134,29 @@ class GameTracker(object):
 
         if len(list(None for (steamid, (teamname, join_time)) in self.roster.items()
                     if teamname in ['Red','Blue'])) >= self.min_players:
-            for (steamid, teamname, join_time, end_time) in generate_awards():
+            # If there are enough players to count this for scoring.
+            for (steamid, teamname, join_time, end_time) in generate_attempts():
                 time_on_team = (max(end_time, self.most_recent_round_start) -
                                 max(join_time, self.most_recent_round_start))
                 assert time_on_team.seconds <= time_taken.seconds
 
-                award = team_sign.get(teamname, 0) * (time_on_team.seconds / time_taken.seconds)
-                self.scores[(self.current_map, self.current_point, steamid, teamname)] += award
-                logging.debug('   %s on %s for %d out of %d seconds, adding %f' % \
-                              (steamid, teamname, time_on_team.seconds, time_taken.seconds, award))
+                attempt_fraction = (time_on_team.seconds / time_taken.seconds)
+
+                key = (self.current_map, self.current_point, steamid, teamname)
+                (successes, attempts) = self.scores[key]
+                if teamname == winner:
+                    self.scores[key] = (successes + attempt_fraction,
+                                        attempts + attempt_fraction)
+                elif teamname == loser:
+                    self.scores[key] = (successes + 0,
+                                        attempts + attempt_fraction)
+
+                logging.debug('   %s on %s for %d out of %d seconds, %s %f',
+                              steamid, teamname,
+                              time_on_team.seconds, time_taken.seconds,
+                              {winner:'rewarded', loser:'penalized'}.get(teamname, 'ignoring'),
+                              attempt_fraction)
+                
         else:
             logging.debug('Fewer than %d players, not scoring.' % self.min_players)
         self.liabilities = []
