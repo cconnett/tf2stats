@@ -1,12 +1,16 @@
 from __future__ import division
 from collections import defaultdict
 from datetime import datetime
-from logparser import logline
+from math import sqrt
 from pprint import pprint
 from pyparsing import ParseException
 import itertools
 import logging
+import numpy
 import sys
+
+from logparser import logline
+from sign_flip import sign_flip_svd
 
 playernames = {}
 def most_common_player_names(playernames_by_steamid):
@@ -161,7 +165,35 @@ class GameTracker(object):
             logging.debug('Fewer than %d players, not scoring.' % self.min_players)
         self.liabilities = []
 
+map_numpoints = {'pl_goldrush':7, 'pl_badwater':4}
+
 if __name__ == '__main__':
     g = GameTracker()
     for filename in sys.argv[1:]:
+        print 'Processing', filename
         g.processLogFile(filename)
+
+    players = most_common_player_names(playernames)
+    numplayers = len(players)
+
+    for (mapname, numpoints) in map_numpoints.items():
+        matrix = numpy.zeros((numpoints, numplayers))
+        for point in range(numpoints):
+            i = point
+            for (j, (steamid, common_name)) in enumerate(players.items()):
+                for teamname in ['Red', 'Blue']:
+                    successes, attempts = g.scores[(mapname, point, steamid, teamname)]
+                    if teamname == 'Blue':
+                        try:
+                            matrix[i,j] = (successes / attempts)
+                        except ZeroDivisionError:
+                            matrix[i,j] = 0.5
+
+        u,s,v = sign_flip_svd(matrix)
+        point_difficulties = u[:,0]
+        player_skills = v[0,:]
+
+        point_difficulties
+        point_difficulties /= max(point_difficulties)
+        print point_difficulties
+        #print player_skills
