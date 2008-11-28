@@ -1,9 +1,9 @@
 from __future__ import division
-from collections import defaultdict
 from datetime import datetime
 from math import sqrt
 from pprint import pprint
 from pyparsing import ParseException
+import cPickle
 import itertools
 import logging
 import numpy
@@ -11,21 +11,6 @@ import sys
 
 from logparser import logline
 from sign_flip import sign_flip_svd
-
-playernames = {}
-def most_common_player_names(playernames_by_steamid):
-    """return a dictionary containing the most common playername used
-    by each steamid, given the list of playernames used by each
-    steamid."""
-    ret = {}
-    for key in playernames_by_steamid:
-        names = playernames_by_steamid[key]
-        names.sort()
-        groups = [(len(list(group)), val) for (val, group)
-                   in itertools.groupby(names)]
-        groups.sort()
-        ret[key] = groups[-1][1]
-    return ret
 
 # We will track when a player joined a team, and when the most recent
 # point started.  If a player leaves a team early, we'll add them to a
@@ -39,6 +24,8 @@ def most_common_player_names(playernames_by_steamid):
 # credit extends to the point end.  We then process pending
 # liabilities to come up with total liability for everyone who played
 # any part of the point.
+
+floatpair = (0.0,0.0)
 
 class GameTracker(object):
     def __init__(self, min_players=10):
@@ -60,7 +47,10 @@ class GameTracker(object):
         # maps, even though SVD may be run separately for separate
         # maps.  Keys are tuples --- (mapname, point_number, steamid,
         # teamname ('Red' or 'Blue')).  Maps to floating point scores.
-        self.scores = defaultdict(lambda: (0.0,0.0))
+        self.scores = {}
+
+        self.playernames = {}
+        self.players = None
 
     def processLogFile(self, filename):
         for line in file(filename):
@@ -72,7 +62,7 @@ class GameTracker(object):
             # Collect all steamid--playername associations for
             # canonical naming.
             if result.steamid:
-                playernames.setdefault(result.steamid,[]).append(result.playername)
+                self.playernames.setdefault(result.steamid,[]).append(result.playername)
 
             timestamp = datetime.strptime(result.timestamp, '%m/%d/%Y - %H:%M:%S:')
 
@@ -147,7 +137,7 @@ class GameTracker(object):
                 attempt_fraction = (time_on_team.seconds / time_taken.seconds)
 
                 key = (self.current_map, self.current_point, steamid, teamname)
-                (successes, attempts) = self.scores[key]
+                (successes, attempts) = self.scores.get(key, floatpair)
                 if teamname == winner:
                     self.scores[key] = (successes + attempt_fraction,
                                         attempts + attempt_fraction)
@@ -165,25 +155,45 @@ class GameTracker(object):
             logging.debug('Fewer than %d players, not scoring.' % self.min_players)
         self.liabilities = []
 
+    def most_common_player_names(self):
+        """Return a dictionary containing the most common playername used
+        by each steamid, given the list of playernames used by each
+        steamid."""
+        ret = {}
+        for key in self.playernames:
+            names = self.playernames[key]
+            names.sort()
+            groups = [(len(list(group)), val) for (val, group)
+                       in itertools.groupby(names)]
+            groups.sort()
+            ret[key] = groups[-1][1]
+        self.players = ret
+
+
 map_numpoints = {'pl_goldrush':7, 'pl_badwater':4}
 
 if __name__ == '__main__':
-    g = GameTracker()
-    for filename in sys.argv[1:]:
-        print 'Processing', filename
-        g.processLogFile(filename)
+    try:
+        g = cPickle.load(file(sys.argv[1]))
+        print 'Loaded', sys.argv[1]
+    except (cPickle.UnpicklingError, ValueError, EOFError, IndexError), e:
+        g = GameTracker()
+        for filename in sys.argv[1:]:
+            print 'Processing', filename
+            g.processLogFile(filename)
+        cPickle.dump(g, file('default.pyp','w'), 2)
 
-    players = most_common_player_names(playernames)
-    numplayers = len(players)
+    g.most_common_player_names()
+    numplayers = len(g.players)
 
     for (mapname, numpoints) in map_numpoints.items():
         matrix = numpy.zeros((numpoints, numplayers))
         for point in range(numpoints):
             i = point
-            for (j, (steamid, common_name)) in enumerate(players.items()):
+            for (j, (steamid, common_name)) in enumerate(g.players.items()):
                 for teamname in ['Red', 'Blue']:
-                    successes, attempts = g.scores[(mapname, point, steamid, teamname)]
-                    if teamname == 'Blue':
+                    successes, attempts = g.scores.get((mapname, point, steamid, teamname), floatpair)
+                    if teamname == 'Red':
                         try:
                             matrix[i,j] = (successes / attempts)
                         except ZeroDivisionError:
@@ -196,4 +206,6 @@ if __name__ == '__main__':
         point_difficulties
         point_difficulties /= max(point_difficulties)
         print point_difficulties
-        #print player_skills
+        m = max(player_skills)
+        for (skill, (steamid, common_name)) in sorted(zip(player_skills, g.players.items()), reverse=True):
+            print '%4d %s' % (skill/m*1000, common_name)
