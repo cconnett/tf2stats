@@ -112,7 +112,11 @@ class GameTracker(object):
 
             # Record the timestamp of round start.
             if result.roundstart or result.pointcaptured:
-                self.most_recent_round_start = timestamp
+                if self.most_recent_round_start is None or \
+                       timestamp > self.most_recent_round_start:
+                    self.most_recent_round_start = timestamp
+                else:
+                    print 'log lines out of order'
 
     def update_scores(self, time_of_event, (winner, loser)):
         time_taken = time_of_event - self.most_recent_round_start
@@ -186,26 +190,31 @@ if __name__ == '__main__':
     g.most_common_player_names()
     numplayers = len(g.players)
 
-    for (mapname, numpoints) in map_numpoints.items():
-        matrix = numpy.zeros((numpoints, numplayers))
-        for point in range(numpoints):
-            i = point
-            for (j, (steamid, common_name)) in enumerate(g.players.items()):
-                for teamname in ['Red', 'Blue']:
-                    successes, attempts = g.scores.get((mapname, point, steamid, teamname), floatpair)
-                    if teamname == 'Red':
-                        try:
-                            matrix[i,j] = (successes / attempts)
-                        except ZeroDivisionError:
-                            matrix[i,j] = 0.5
+    allpoints = []
+    for (mapname, mappoints) in map_numpoints.items():
+        for i in range(mappoints):
+            allpoints.append((mapname, i))
+    numpoints = len(allpoints)
 
-        u,s,v = sign_flip_svd(matrix)
-        point_difficulties = u[:,0]
-        player_skills = v[0,:]
+    matrix = numpy.zeros((numpoints, numplayers))
+    for point in range(numpoints):
+        i = point
+        for (j, (steamid, common_name)) in enumerate(g.players.items()):
+            for teamname in ['Red', 'Blue']:
+                successes, attempts = g.scores.get((mapname, point, steamid, teamname), floatpair)
+                if teamname == 'Red':
+                    try:
+                        matrix[i,j] = (successes / attempts)
+                    except ZeroDivisionError:
+                        matrix[i,j] = 0.5
 
-        point_difficulties
-        point_difficulties /= max(point_difficulties)
-        print point_difficulties
-        m = max(player_skills)
-        for (skill, (steamid, common_name)) in sorted(zip(player_skills, g.players.items()), reverse=True):
-            print '%4d %s' % (skill/m*1000, common_name)
+    u,s,v = sign_flip_svd(matrix)
+    point_difficulties = u[:,0]
+    player_skills = v[0,:]
+
+    point_difficulties
+    point_difficulties /= max(point_difficulties)
+    print point_difficulties
+    m = max(player_skills)
+    for (skill, (steamid, common_name)) in sorted(zip(player_skills, g.players.items()), reverse=True):
+        print '%4d %s' % (skill/m*1000, common_name)
