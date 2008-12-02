@@ -121,41 +121,53 @@ class GameTracker(object):
     def update_scores(self, time_of_event, (winner, loser)):
         time_taken = time_of_event - self.most_recent_round_start
 
-        def generate_attempts():
+        def generate_attempts(target_teamname=None):
             """Generate tuples representing the responsibility of
             every player involved in the event leading to this update
             of scores."""
             for (steamid, (teamname, join_time)) in self.roster.items():
-                yield (steamid, teamname, join_time, time_of_event)
+                if target_teamname is None or target_teamname == teamname:
+                    yield (steamid, teamname, join_time, time_of_event)
             for (steamid, teamname, join_time, part_time) in self.liabilities:
-                yield (steamid, teamname, join_time, part_time)
+                if target_teamname is None or target_teamname == teamname:
+                    yield (steamid, teamname, join_time, part_time)
 
+        # If there are enough players to count this for scoring.
         if len(list(None for (steamid, (teamname, join_time)) in self.roster.items()
                     if teamname in ['Red','Blue'])) >= self.min_players:
-            # If there are enough players to count this for scoring.
-            for (steamid, teamname, join_time, end_time) in generate_attempts():
+            # For every edge in complete bipartite graph of the teams
+            for (steamid_blue, teamname, join_time, end_time) in generate_attempts('Blue'):
                 time_on_team = (max(end_time, self.most_recent_round_start) -
                                 max(join_time, self.most_recent_round_start))
-                #assert time_on_team.seconds <= time_taken.seconds
                 time_on_team = max(time_on_team, time_taken)
+                attempt_fraction_blue = (time_on_team.seconds / time_taken.seconds)
+                for (steamid_red, teamname, join_time, end_time) in generate_attempts('Red'):
+                    time_on_team = (max(end_time, self.most_recent_round_start) -
+                                    max(join_time, self.most_recent_round_start))
+                    time_on_team = max(time_on_team, time_taken)
+                    attempt_fraction_red = (time_on_team.seconds / time_taken.seconds)
 
-                attempt_fraction = (time_on_team.seconds / time_taken.seconds)
+                    combined_attempt_fraction = attempt_fraction_blue * attempt_fraction_red
 
-                key = (self.current_map, self.current_point, steamid, teamname)
-                (successes, attempts) = self.scores.get(key, floatpair)
-                if teamname == winner:
-                    self.scores[key] = (successes + attempt_fraction,
-                                        attempts + attempt_fraction)
-                elif teamname == loser:
-                    self.scores[key] = (successes + 0,
-                                        attempts + attempt_fraction)
+                    (successes_blue, attempts_blue) = \
+                                     self.scores.get((steamid_blue, steamid_red), floatpair)
+                    (successes_red, attempts_red) = \
+                                    self.scores.get((steamid_red, steamid_blue), floatpair)
 
-                logging.debug('   %s on %s for %d out of %d seconds, %s %f',
-                              steamid, teamname,
-                              time_on_team.seconds, time_taken.seconds,
-                              {winner:'rewarded', loser:'penalized'}.get(teamname, 'ignoring'),
-                              attempt_fraction)
-                
+                    if winner == 'Blue':
+                        self.scores[(steamid_blue, steamid_red)] = \
+                                                   (successes_blue + combined_attempt_fraction,
+                                                    attempts_blue + combined_attempt_fraction)
+                        self.scores[(steamid_red, steamid_blue)] = \
+                                                   (successes_red + 0,
+                                                    attempts_red + combined_attempt_fraction)
+                    elif winner == 'Red':
+                        self.scores[(steamid_blue, steamid_red)] = \
+                                                   (successes_blue + 0,
+                                                    attempts_blue + combined_attempt_fraction)
+                        self.scores[(steamid_red, steamid_blue)] = \
+                                                   (successes_red + combined_attempt_fraction,
+                                                    attempts_red + combined_attempt_fraction)
         else:
             logging.debug('Fewer than %d players, not scoring.' % self.min_players)
         self.liabilities = []
@@ -175,6 +187,9 @@ class GameTracker(object):
         self.players = ret
 
 
+def harmonic_mean(seq):
+    return 1/sum(1/x for x in seq)
+
 map_numpoints = {'pl_goldrush':7, 'pl_badwater':4}
 
 if __name__ == '__main__':
@@ -191,31 +206,27 @@ if __name__ == '__main__':
     g.most_common_player_names()
     numplayers = len(g.players)
 
-    allpoints = []
-    for (mapname, mappoints) in map_numpoints.items():
-        for i in range(mappoints):
-            allpoints.append((mapname, i))
-    numpoints = len(allpoints)
-
-    matrix = numpy.zeros((numpoints, numplayers))
-    for point in range(numpoints):
-        i = point
-        for (j, (steamid, common_name)) in enumerate(g.players.items()):
-            for teamname in ['Red', 'Blue']:
-                successes, attempts = g.scores.get((mapname, point, steamid, teamname), floatpair)
-                if teamname == 'Red':
-                    try:
-                        matrix[i,j] = (successes / attempts)
-                    except ZeroDivisionError:
-                        matrix[i,j] = 0.5
+    matrix = numpy.zeros((numplayers, numplayers))
+    for (i, (steamid_blue, common_name)) in enumerate(g.players.items()):
+        for (j, (steamid_red, common_name)) in enumerate(g.players.items()):
+            successes, attempts = g.scores.get((steamid_blue, steamid_red), floatpair)
+            try:
+                matrix[i,j] = (successes / attempts)
+            except ZeroDivisionError:
+                matrix[i,j] = 0.0
 
     u,s,v = sign_flip_svd(matrix)
-    point_difficulties = u[:,0]
-    player_skills = v[0,:]
+    offense_skills = u[:,0]
+    defense_skills = v[0,:]
 
-    point_difficulties
-    point_difficulties /= max(point_difficulties)
-    print point_difficulties
-    m = max(player_skills)
-    for (skill, (steamid, common_name)) in sorted(zip(player_skills, g.players.items()), reverse=True):
-        print '%7.2f %s' % (skill/m*1000, common_name)
+    skills = []
+    for ((steamid, common_name), offense_skill, defense_skill) in \
+            sorted(zip(g.players.items(), offense_skills, defense_skills)):
+        skills.append((harmonic_mean([offense_skill, defense_skill]), common_name))
+
+    min_skill = min(skill for (skill, name) in skills)
+    max_skill = max(skill - min_skill for (skill, name) in skills)
+
+    skills = [((skill-min_skill) / max_skill, name) for (skill, name) in skills]
+    for (skill, common_name) in sorted(skills, reverse=True):
+        print '%7.2f %s' % (skill*1000, common_name)
