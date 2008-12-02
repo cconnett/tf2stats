@@ -218,4 +218,4 @@ if __name__ == '__main__':
     print point_difficulties
     m = max(player_skills)
     for (skill, (steamid, common_name)) in sorted(zip(player_skills, g.players.items()), reverse=True):
-        print '%4d %s' % (skill/m*1000, common_name)
+        print '%7.2f %s' % (skill/m*1000, common_name)
