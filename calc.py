@@ -136,7 +136,8 @@ class GameTracker(object):
             for (steamid, teamname, join_time, end_time) in generate_attempts():
                 time_on_team = (max(end_time, self.most_recent_round_start) -
                                 max(join_time, self.most_recent_round_start))
-                assert time_on_team.seconds <= time_taken.seconds
+                #assert time_on_team.seconds <= time_taken.seconds
+                time_on_team = max(time_on_team, time_taken)
 
                 attempt_fraction = (time_on_team.seconds / time_taken.seconds)
 
