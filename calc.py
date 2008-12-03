@@ -217,9 +217,9 @@ if __name__ == '__main__':
             except ZeroDivisionError:
                 matrix[i,j] = 0.0
 
-    u,s,v = sign_flip_svd(matrix)
-    offense_skills = u[:,0]
-    defense_skills = v[0,:]
+    u,s,v = numpy.linalg.svd(matrix)
+    offense_skills = -u[:,0]
+    defense_skills = -v[0,:]
 
     skills = []
     for ((steamid, common_name), offense_skill, defense_skill) in \
