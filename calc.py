@@ -120,6 +120,8 @@ class GameTracker(object):
 
     def update_scores(self, time_of_event, (winner, loser)):
         time_taken = time_of_event - self.most_recent_round_start
+        if not time_taken:
+            return
 
         def generate_attempts(target_teamname=None):
             """Generate tuples representing the responsibility of
