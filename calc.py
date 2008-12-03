@@ -205,8 +205,23 @@ if __name__ == '__main__':
             g.processLogFile(filename)
         cPickle.dump(g, file('default.pyp','w'), 2)
 
+    print 'Done loading data'
+
     g.most_common_player_names()
+
+    player_total_attempts = {}
+    for (b, r) in g.scores:
+        player_total_attempts.setdefault(b, 0)
+        player_total_attempts.setdefault(r, 0)
+        player_total_attempts[b] += g.scores[(b,r)][1]
+        player_total_attempts[r] += g.scores[(b,r)][1]
+
+    for steamid in g.players.keys():
+        if player_total_attempts.setdefault(steamid, 0) < 1500:
+            del g.players[steamid]
+
     numplayers = len(g.players)
+    print '%d players above activity threshold' % numplayers
 
     matrix = numpy.zeros((numplayers, numplayers))
     for (i, (steamid_blue, common_name)) in enumerate(g.players.items()):
