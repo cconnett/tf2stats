@@ -242,8 +242,8 @@ if __name__ == '__main__':
         skills.append((harmonic_mean([offense_skill, defense_skill]), common_name))
 
     min_skill = min(skill for (skill, name) in skills)
-    max_skill = max(skill - min_skill for (skill, name) in skills)
+    max_skill = max(skill for (skill, name) in skills)
 
-    skills = [((skill-min_skill) / max_skill, name) for (skill, name) in skills]
-    for (skill, common_name) in sorted(skills, reverse=True):
-        print '%7.2f %s' % (skill*1000, common_name)
+    skills = [(skill / max_skill, name) for (skill, name) in skills]
+    for (i, (skill, common_name)) in enumerate(sorted(skills, reverse=True)):
+        print '%4d. %7.2f %s' % (i+1, skill*1000, common_name)
