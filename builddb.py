@@ -272,6 +272,9 @@ def processLogFile(filename, dbconn):
                 cursor.execute('update players set name = ? where steamid = ?',
                                (name, steamid))
 
+    # Clean out the meaningless entries in spectators
+    cursor.execute('delete from spectators where begin = end')
+
 def non_death_end_life(cursor, steamid, team, timestamp, reason):
     global curlives
     life, curclass, nextclass, begin = curlives[steamid]
