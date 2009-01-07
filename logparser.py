@@ -3,14 +3,16 @@ import operator
 
 team = oneOf(['Red','Blue','','Unassigned','Console','Spectator']).setResultsName('team')
 
-steamid = Regex(r'STEAM_\d:\d:\d+').setResultsName('steamid')
-player = Regex(r'"(?P<name>.*?)<\d+><(?P<steamid>STEAM_\d:\d:\d+)>'
+player = Regex(r'"(?P<name>.{,32}?)<\d+><STEAM_(?P<steamid>\d:\d:\d+)>'
                r'<(?P<team>Blue|Red||Unassigned|Console|Spectator)>"')
 actor = player
 
 reason = Regex(r'".*"')
 
-parameters = dictOf(Literal('(').suppress() + Regex(r'\w+'), dblQuotedString + Literal(')').suppress())
+parameters = dictOf(Literal('(').suppress() + Regex(r'\w+'),
+                    (dblQuotedString + Literal(')').suppress()) |
+                    (player + Literal(')').suppress())
+                    )
 
 kill = actor.setResultsName('killer') + 'killed' + actor.setResultsName('victim') + \
        'with' + dblQuotedString.setResultsName('weapon') + parameters
