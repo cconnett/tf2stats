@@ -196,34 +196,39 @@ def processLogFile(filename, dbconn):
                 elif eventtype in ['kill assist', 'domination', 'revenge']:
                     vicplayer = actor.parseString(event.vicplayer).steamid
                     parent = lastkill
-                else:
+                elif eventtype in ['captureblocked', 'pointcaptured', 'chargedeployed']:
                     vicplayer = None
+                else:
+                    # Some other event that we don't care about
+                    # (e.g. "bm_autobalanceteams switch")
+                    continue
 
                 weapon = event.weapon.strip('"') if event.weapon else None
 
             srclife = curlives[srcplayer][0]
-            viclife, curclass, nextclass, begin = curlives.get(vicplayer, (None,None,None,None))
-            cursor.execute("insert into events values (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                           (eventtype, timestamp,
-                            srcplayer, srclife,
-                            vicplayer, viclife,
-                            weapon, curround.id, parent, obj))
+            viclife, curclass, begin = curlives.get(vicplayer, (None,None,None))
+            if srclife is not None:
+                cursor.execute("insert into events values (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                               (eventtype, timestamp,
+                                srcplayer, srclife,
+                                vicplayer, viclife,
+                                weapon, curround.id, parent, obj))
             if result.kill or result.suicide:
                 end = timestamp
                 lastkill = cursor.lastrowid
                 cursor.execute("insert into lives values (?, ?, ?, ?, ?, ?, ?, ?)",
                                (viclife, vicplayer, curteams[vicplayer], curclass,
                                 begin, end, eventtype, lastkill))
-                curlives[vicplayer] = (nextlife, nextclass, nextclass, timestamp)
+                curlives[vicplayer] = (nextlife, curclass, timestamp)
                 nextlife += 1
 
         if result.changerole:
+            steamid = result.changerole.steamid
             newrole = result.changerole.newrole.strip('"')
-            if result.changerole.steamid not in curlives:
-                curlives[result.changerole.steamid] = (nextlife, newrole, newrole, timestamp)
-                nextlife += 1
-            curlife, curclass, nextclass, begin = curlives[result.changerole.steamid]
-            curlives[result.changerole.steamid] = (curlife, curclass, newrole, begin)
+            if steamid in curlives:
+                non_death_end_life(cursor, steamid, curteams[steamid], timestamp, 'changerole')
+            curlives[steamid] = (nextlife, newrole, timestamp)
+            nextlife += 1
         if result.changeteam:
             steamid = result.changeteam.steamid
             if result.changeteam.newteam in ['Red', 'Blue']:
@@ -231,17 +236,18 @@ def processLogFile(filename, dbconn):
             if result.changeteam.team == 'Spectator':
                 cursor.execute('insert into spectators values (?, ?, ?)',
                                (steamid, curspecs[steamid], timestamp))
+                del curspecs[steamid]
             if result.changeteam.newteam == 'Spectator':
                 curspecs[steamid] = timestamp
         if result.humiliationend:
             for steamid in curlives:
                 non_death_end_life(cursor, steamid, curteams[steamid], timestamp, 'miniroundend')
-                curlife, curclass, nextclass, begin = curlives[steamid]
-                curlives[steamid] = (None, nextclass, nextclass, timestamp)
+                curlife, curclass, begin = curlives[steamid]
+                curlives[steamid] = (None, curclass, timestamp)
         if result.setupbegin:
             for steamid in curlives:
-                curlife, curclass, nextclass, begin = curlives[steamid]
-                curlives[steamid] = (nextlife, nextclass, nextclass, timestamp)
+                curlife, curclass, begin = curlives[steamid]
+                curlives[steamid] = (nextlife, curclass, timestamp)
                 nextlife += 1
         if result.leave:
                 quitter = actor.parseString(result.leave.quitter)
@@ -252,6 +258,14 @@ def processLogFile(filename, dbconn):
                 finally:
                     if quitter.steamid in curlives:
                         del curlives[quitter.steamid]
+
+                if quitter.team == 'Spectator':
+                    cursor.execute('insert into spectators values (?, ?, ?)',
+                                   (quitter.steamid, curspecs[quitter.steamid], timestamp))
+                if quitter.steamid in curspecs:
+                    del curspecs[quitter.steamid]
+                if quitter.steamid in curteams:
+                    del curteams[quitter.steamid]
 
         # END OF LIFE TRACKING
 
@@ -274,13 +288,15 @@ def processLogFile(filename, dbconn):
 
     # Clean out the meaningless entries in spectators
     cursor.execute('delete from spectators where begin = end')
+    # Clean out lives of 0 seconds
+    cursor.execute('delete from lives where begin = end')
 
-def non_death_end_life(cursor, steamid, team, timestamp, reason):
+def non_death_end_life(cursor, steamid, team, end, reason):
     global curlives
-    life, curclass, nextclass, begin = curlives[steamid]
-    if life is not None:
+    life, curclass, begin = curlives[steamid]
+    if life is not None and begin != end:
         cursor.execute('insert into lives values (?, ?, ?, ?, ?, ?, ?, ?)',
-                       (life, steamid, team, curclass, begin, timestamp, reason, None))
+                       (life, steamid, team, curclass, begin, end, reason, None))
 
 def deb(o):
     print str(type(o)) + ": " + repr(o)
