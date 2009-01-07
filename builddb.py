@@ -25,7 +25,6 @@ curteams = {}
 curspecs = {}
 lastkill = None
 nextlife = 1
-new_series = False
 
 def processLogFile(filename, dbconn):
     global curround
@@ -34,7 +33,6 @@ def processLogFile(filename, dbconn):
     global curspecs
     global lastkill
     global nextlife
-    global new_series
 
     cursor = dbconn.cursor()
     unparsed = file(unparsedfilename + os.path.basename(filename), 'a')
@@ -54,11 +52,12 @@ def processLogFile(filename, dbconn):
             # lives --- are over.  Also record the map name locally.
             if result.loadmap:
                 curround.map = result.loadmap.mapname
-                curround.point = 1
                 logging.info("***Loading map '%s'" % curround.map)
                 curround.begin = timestamp
                 curround.type = 'waiting'
                 curround.miniround = 'a'
+                curround.point = 1
+                curround.overtime = None
                 curlives = {}
                 curteams = {}
 
@@ -85,8 +84,12 @@ def processLogFile(filename, dbconn):
             if result.setupbegin:
                 curround.overtime = None
                 curround.begin = timestamp
-                curround.miniround = result.setupbegin.miniround.strip('"').strip('round_')
                 curround.type = 'setup'
+                curround.miniround = result.setupbegin.miniround.strip('"').strip('round_')
+                if curround.miniround == 'a':
+                    curround.series += 1
+                    curround.point = 1
+
 
             if result.setupend:
                 cursor.execute('insert into rounds values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -104,6 +107,7 @@ def processLogFile(filename, dbconn):
             if result.pointcaptured:
                 # Record that the round is over and that blue won
                 curround.end = timestamp
+                curround.point = int(result.pointcaptured.cp.strip('"')) + 1
                 cursor.execute('insert into rounds values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                                (curround.id, curround.map,
                                 curround.miniround, curround.type,
@@ -127,7 +131,6 @@ def processLogFile(filename, dbconn):
 
             if result.humiliationbegin:
                 curround.begin = timestamp
-                curround.overtime = None
                 curround.bluewin = result.humiliationbegin.winner.strip('"') == 'Blue'
                 curround.type = 'humiliation'
 
@@ -136,20 +139,15 @@ def processLogFile(filename, dbconn):
                                (curround.id, curround.map,
                                 curround.miniround, curround.type,
                                 None, curround.series,
-                                curround.begin, timestamp, curround.overtime,
+                                curround.begin, timestamp, None,
                                 curround.bluewin))
                 curround.id += 1
-                if new_series:
-                    curround.series += 1
-                    curround.point = 1
-                    new_series = False
+                curround.overtime = None
 
             if result.roundwin:
                 # Round win: If blue won, we've already closed the round
                 # and recorded the capture.  If red won, we now must close
                 # the round.
-                new_series = True
-
                 if result.roundwin.winner.strip('"') == 'Red':
                     cursor.execute('insert into rounds values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                                    (curround.id, curround.map,
@@ -158,7 +156,6 @@ def processLogFile(filename, dbconn):
                                     curround.begin, timestamp, curround.overtime,
                                     False))
                     curround.id += 1
-                    curround.overtime = None
 
             # END OF ROUND TRACKING
 
