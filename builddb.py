@@ -17,7 +17,7 @@ class Round(object):
         for s,v in zip(Round.__slots__, args):
             setattr(self, s, v)
 
-curround = Round(1, 'pl_goldrush', 'a', None, 1, 1, None, None, None, None)
+curround = Round(1, None, None, None, 1, 1, None, None, None, None)
 curlives = {}
 curteams = {}
 curspecs = {}
