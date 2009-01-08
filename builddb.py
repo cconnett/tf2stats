@@ -24,6 +24,8 @@ curlives = {}
 curteams = {}
 curspecs = {}
 lastkill = None
+lastkillobj = None
+lastkillasst = None
 nextlife = 1
 
 def processLogFile(filename, dbconn):
@@ -32,6 +34,8 @@ def processLogFile(filename, dbconn):
     global curteams
     global curspecs
     global lastkill
+    global lastkillobj
+    global lastkillasst
     global nextlife
 
     cursor = dbconn.cursor()
@@ -62,7 +66,6 @@ def processLogFile(filename, dbconn):
                 curteams = {}
 
             # START OF ROUND TRACKING
-
             # Overtime started, record it.
             if result.overtime:
                 curround.overtime = timestamp
@@ -188,23 +191,27 @@ def processLogFile(filename, dbconn):
                     eventtype = event.eventname.strip('"')
 
                     srcplayer = actor.parseString(event.srcplayer).steamid
+                    weapon = event.weapon.strip('"') if event.weapon else None
+                    obj = event.object.strip('"').lower() if event.object else None
 
-                    if eventtype in ['builtobject', 'killedobject']:
-                        obj = event.object.strip('"').lower()
+                    if eventtype in ['killedobject'] and event.assist:
+                        eventtype = 'killobj assist'
+                        parent = lastkillobj
 
-                    if eventtype in ['killedobject']:
+                    if eventtype in ['killedobject', 'killobj assist']:
                         vicplayer = actor.parseString(event.objectowner).steamid
                     elif eventtype in ['kill assist', 'domination', 'revenge']:
                         vicplayer = actor.parseString(event.vicplayer).steamid
-                        parent = lastkill
+                        if event.assist: # When person gets dom/rev from their assist, not assists w/ a dom/rev
+                            parent = lastkillasst
+                        else:
+                            parent = lastkill
                     elif eventtype in ['captureblocked', 'pointcaptured', 'chargedeployed']:
                         vicplayer = None
                     else:
                         # Some other event that we don't care about
                         # (e.g. "bm_autobalanceteams switch")
                         continue
-
-                    weapon = event.weapon.strip('"') if event.weapon else None
 
                 srclife = curlives[srcplayer][0]
                 viclife, curclass, begin = curlives.get(vicplayer, (None,None,None))
@@ -214,9 +221,19 @@ def processLogFile(filename, dbconn):
                                     srcplayer, srclife,
                                     vicplayer, viclife,
                                     weapon, curround.id, parent, obj))
+                # Set this event as the most recent kill/kill assist/killedobj
+                if result.kill or result.suicide:
+                    lastkill = cursor.lastrowid
+                if result.event and result.triggered:
+                    # eventtype in scope from the similar branch above
+                    if eventtype == 'killedobject':
+                        lastkillobj = cursor.lastrowid
+                    if eventtype == 'kill assist':
+                        lastkillasst = cursor.lastrowid
+
+                # Insert the life that was ended by this kill/suicide.
                 if result.kill or result.suicide:
                     end = timestamp
-                    lastkill = cursor.lastrowid
                     cursor.execute("insert into lives values (?, ?, ?, ?, ?, ?, ?, ?)",
                                    (viclife, vicplayer, curteams[vicplayer], curclass,
                                     begin, end, eventtype, lastkill))
