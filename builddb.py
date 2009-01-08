@@ -325,14 +325,34 @@ def deb(o):
 
 def main(logs):
     dbconn = sqlite3.connect('tf2.db')
+
+    # Support resuming by fetching the max ids already in use.
+    global curround
+    global nextlife
+    cursor = dbconn.cursor()
+    cursor.execute('select max(id) from rounds')
+    try:
+        curround.id = cursor.fetchone()[0] + 1
+    except TypeError:
+        curround.id = 1
+    cursor.execute('select max(id) from lives')
+    try:
+        nextlife = cursor.fetchone()[0] + 1
+    except TypeError:
+        nextlife = 1
+    cursor.execute('select max(series) from rounds')
+    try:
+        curround.series = cursor.fetchone()[0] + 1
+    except TypeError:
+        curround.series = 1
+    cursor.close()
+
     for filename in logs:
-        print 'Processing', filename,
+        print 'Processing', filename
         errorcount = processLogFile(filename, dbconn)
         if errorcount != 0:
-            print 'errors = %d' % errorcount
-        else:
-            print
-    #dbconn.commit()
+            print '\t\terrors = %d' % errorcount
+    dbconn.commit()
     dbconn.close()
 
 if __name__ == '__main__':
