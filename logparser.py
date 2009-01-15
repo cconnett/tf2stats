@@ -23,25 +23,30 @@ triggered_event = actor.setResultsName('srcplayer') + 'triggered' + \
                   Optional(Literal('against') + actor.setResultsName('vicplayer')) + \
                   parameters
 event = kill.setResultsName('kill') | \
-        suicide.setResultsName('suicide') | \
-        triggered_event.setResultsName('triggered')
+        triggered_event.setResultsName('triggered') | \
+        suicide.setResultsName('suicide')
+
 
 
 line_kinds = {
-    'enter': actor.setResultsName('newplayer') + 'entered the game',
-    'leave': actor.setResultsName('quitter') + 'disconnected (reason ' + reason + ')',
-    'changename': actor + 'changed name to' + dblQuotedString.setResultsName('newplayer'),
+    'event': event,
+
     'changerole': actor + 'changed role to' + dblQuotedString.setResultsName('newrole'),
     'changeteam': actor + 'joined team "' + team.setResultsName('newteam') + '"',
+
+    'pointcaptured': Literal('Team "Blue"') + 'triggered "pointcaptured"' + parameters,
+
     'setupbegin': Literal('World triggered "Mini_Round_Selected" (round') + dblQuotedString.setResultsName('miniround') + ')',
     'setupend': Literal('World triggered "Round_Setup_End"'),
     'humiliationbegin': Literal('World triggered "Mini_Round_Win"') + parameters,
     'humiliationend': Literal('World triggered "Round_Setup_Begin"') | Literal('World triggered "Game_Over"'),
-    'pointcaptured': Literal('Team "Blue"') + 'triggered "pointcaptured"' + parameters,
-    'roundwin': Literal('World triggered "Round_Win" (winner "') + team.setResultsName('winner') + '")',
     'overtime': Literal('World triggered "Round_Overtime"'),
+
+    'enter': actor.setResultsName('newplayer') + 'entered the game',
+    'leave': actor.setResultsName('quitter') + 'disconnected (reason ' + reason + ')',
+    'changename': actor + 'changed name to' + dblQuotedString.setResultsName('newplayer'),
+
     'loadmap': Literal('Loading map "') + Regex(r'\w+').setResultsName('mapname') + '"',
-    'event': event,
 }
 timestamp = Regex(r'\d{2}/\d{2}/\d{4} - \d{2}:\d{2}:\d{2}:')
 logline = (Literal('L ').suppress() +
