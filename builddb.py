@@ -115,7 +115,7 @@ def processLogFile(filename, dbconn):
                                (curround.id, curround.map,
                                 curround.miniround, curround.type,
                                 curround.point, curround.series,
-                                curround.begin, timestamp, curround.overtime,
+                                curround.begin, curround.end, curround.overtime,
                                 True))
 
                 # Record the capturers
@@ -133,6 +133,21 @@ def processLogFile(filename, dbconn):
                 curround.type = 'normal'
 
             if result.humiliationbegin:
+                # Humiliation begin/miniround won: If blue won, we've
+                # already closed the normal round for the last point
+                # and recorded the capture.  If red won, we now must
+                # close the round.
+                if result.humiliationbegin.winner.strip('"') == 'Red':
+                    cursor.execute('insert into rounds values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                                   (curround.id, curround.map,
+                                    curround.miniround, 'normal',
+                                    curround.point, curround.series,
+                                    curround.begin, timestamp, curround.overtime,
+                                    False))
+                    curround.id += 1
+
+                # And now record the new info for the beginning of the
+                # humiliation round.
                 curround.begin = timestamp
                 curround.bluewin = result.humiliationbegin.winner.strip('"') == 'Blue'
                 curround.type = 'humiliation'
@@ -143,22 +158,9 @@ def processLogFile(filename, dbconn):
                                 curround.miniround, curround.type,
                                 None, curround.series,
                                 curround.begin, timestamp, None,
-                                curround.bluewin))
+                                None))
                 curround.id += 1
                 curround.overtime = None
-
-            if result.roundwin:
-                # Round win: If blue won, we've already closed the round
-                # and recorded the capture.  If red won, we now must close
-                # the round.
-                if result.roundwin.winner.strip('"') == 'Red':
-                    cursor.execute('insert into rounds values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                                   (curround.id, curround.map,
-                                    curround.miniround, 'normal',
-                                    curround.point, curround.series,
-                                    curround.begin, timestamp, curround.overtime,
-                                    False))
-                    curround.id += 1
 
             # END OF ROUND TRACKING
 
