@@ -109,6 +109,9 @@ def processLogFile(filename, dbconn):
                                 None, curround.series,
                                 curround.begin, timestamp, curround.overtime,
                                 None))
+                cursor.executemany('insert or ignore into roundlives values (?, ?)',
+                                   [(curround.id, life)
+                                    for (life, curclass, begin) in curlives.values()])
 
                 curround.id += 1
                 curround.overtime = None
@@ -119,12 +122,18 @@ def processLogFile(filename, dbconn):
                 # Record that the round is over and that blue won
                 curround.end = timestamp
                 curround.point = int(result.pointcaptured.cp.strip('"')) + 1
+                assert curround.type == 'normal'
+                assert curround.point is not None
                 cursor.execute('insert into rounds values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                                (curround.id, curround.map,
                                 curround.miniround, curround.type,
                                 curround.point, curround.series,
                                 curround.begin, curround.end, curround.overtime,
                                 True))
+                cursor.executemany('insert or ignore into roundlives values (?, ?)',
+                                   [(curround.id, life)
+                                    for (life, curclass, begin) in curlives.values()])
+
 
                 # Record the capturers
                 for p in result.pointcaptured.keys():
@@ -146,12 +155,16 @@ def processLogFile(filename, dbconn):
                 # and recorded the capture.  If red won, we now must
                 # close the round.
                 if result.humiliationbegin.winner.strip('"') == 'Red':
+                    assert curround.point is not None
                     cursor.execute('insert into rounds values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                                    (curround.id, curround.map,
                                     curround.miniround, 'normal',
                                     curround.point, curround.series,
                                     curround.begin, timestamp, curround.overtime,
                                     False))
+                    cursor.executemany('insert or ignore into roundlives values (?, ?)',
+                                       [(curround.id, life)
+                                        for (life, curclass, begin) in curlives.values()])
                     curround.id += 1
 
                 # And now record the new info for the beginning of the
@@ -167,6 +180,9 @@ def processLogFile(filename, dbconn):
                                 None, curround.series,
                                 curround.begin, timestamp, None,
                                 None))
+                cursor.executemany('insert or ignore into roundlives values (?, ?)',
+                                   [(curround.id, life)
+                                    for (life, curclass, begin) in curlives.values()])
                 curround.id += 1
                 curround.overtime = None
 
