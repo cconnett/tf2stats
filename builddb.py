@@ -268,6 +268,8 @@ def processLogFile(filename, dbconn):
                     cursor.execute("insert into lives values (?, ?, ?, ?, ?, ?, ?, ?)",
                                    (viclife, vicplayer, curteams[vicplayer], curclass,
                                     begin, end, eventtype, lastkill))
+                    cursor.execute("insert or ignore into roundlives values (?, ?)",
+                                   (curround.id, viclife))
                     curlives[vicplayer] = (nextlife, curclass, timestamp)
                     nextlife += 1
 
@@ -346,10 +348,13 @@ def processLogFile(filename, dbconn):
 
 def non_death_end_life(cursor, steamid, team, end, reason):
     global curlives
+    global curround
     life, curclass, begin = curlives[steamid]
     if life is not None and begin != end:
         cursor.execute('insert into lives values (?, ?, ?, ?, ?, ?, ?, ?)',
                        (life, steamid, team, curclass, begin, end, reason, None))
+        cursor.execute('insert or ignore into roundlives values (?, ?)',
+                       (curround.id, life))
 
 def deb(o):
     print str(type(o)) + ": " + repr(o)
