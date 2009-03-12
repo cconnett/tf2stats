@@ -236,7 +236,8 @@ def processLogFile(filename, dbconn):
                             parent = lastkillasst
                         else:
                             parent = lastkill
-                    elif eventtype in ['captureblocked', 'pointcaptured', 'chargedeployed']:
+                    elif eventtype in ['captureblocked', 'pointcaptured',
+                                       'chargedeployed', 'builtobject']:
                         vicplayer = None
                     else:
                         # Some other event that we don't care about
