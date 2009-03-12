@@ -174,6 +174,10 @@ def processLogFile(filename, dbconn):
                 curround.type = 'humiliation'
 
             if result.humiliationend:
+                if curround.type == 'normal':
+                    # An admin restarted the game in the middle of a
+                    # round.
+                    curround.type = 'aborted'
                 cursor.execute('insert into rounds values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                                (curround.id, curround.map,
                                 curround.miniround, curround.type,
