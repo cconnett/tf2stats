@@ -89,6 +89,14 @@ def processLogFile(filename, dbconn):
                 curround.begin = timestamp
                 curround.type = 'setup'
                 curround.miniround = result.setupbegin.miniround.strip('"').strip('round_')
+                try:
+                    # For some crazy reason, in *some* cases, the
+                    # minirounds are named with numbers instead of
+                    # letters.  So we have to check if it's a number
+                    # and map it to a letter.
+                    curround.miniround = chr(ord('a') - 1 + int(curround.miniround))
+                except ValueError:
+                    pass
                 if curround.miniround == 'a':
                     curround.series += 1
                     curround.point = 1
