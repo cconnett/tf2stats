@@ -194,10 +194,6 @@ def processLogFile(filename, dbconn):
 
             # START OF LIFE TRACKING
 
-            # It should be pretty universal that spawns are at least 5
-            # seconds, so don't record any lives that are 5 seconds or
-            # shorter.
-
             if result.event:
                 obj = None
                 parent = None
@@ -339,11 +335,10 @@ def processLogFile(filename, dbconn):
         except Exception, e:
             print >> errors, e
             print >> errors, line
+            print e
+            print line
             errorcount += 1
-    # Clean out the meaningless entries in spectators
-    cursor.execute('delete from spectators where begin = end')
-    # Clean out lives of 0 seconds
-    cursor.execute('delete from lives where begin = end')
+            #raise
     return errorcount
 
 def non_death_end_life(cursor, steamid, team, end, reason):
@@ -360,7 +355,7 @@ def deb(o):
     print str(type(o)) + ": " + repr(o)
 
 def main(logs):
-    dbconn = sqlite3.connect('tf2.db')
+    dbconn = sqlite3.connect('/mnt/stash/tf2.db')
 
     # Support resuming by fetching the max ids already in use.
     global curround
@@ -384,10 +379,24 @@ def main(logs):
     cursor.close()
 
     for filename in logs:
-        print 'Processing', filename
+        sys.stdout.write('Processing ' + filename)
+        sys.stdout.flush()
         errorcount = processLogFile(filename, dbconn)
         if errorcount != 0:
+            print
             print '\t\terrors = %d' % errorcount
+        else:
+            sys.stdout.write('\r')
+    dbconn.commit()
+    sys.stdout.write('\nCleaning up')
+    # Clean out the meaningless entries in spectators.
+    cursor.execute('delete from spectators where begin = end')
+    # Clean out lives of 0 seconds.
+    cursor.execute('delete from lives where begin = end')
+    # Clean up wrong viclife entry on assists, dominations, and
+    # revenges.
+    cursor.execute("""update events set viclife = (select viclife from events e2 where e2.id = events.parent)
+    where type in ('kill assist','domination','revenge')""")
     dbconn.commit()
     dbconn.close()
 
