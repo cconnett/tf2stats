@@ -17,21 +17,21 @@ class SkillGP(CascadeGP.CascadeGP):
         self.answers = answers
 
     def new_individual(self):
-        return [random.gauss(0, 1) for elt in self.inputs[0]]
+        return array([random.gauss(0, 1) for elt in self.inputs[0]])
     def new_offspring(self, parent_a, parent_b):
         crossover = random.randrange(len(parent_a))
-        child = parent_a[:crossover] + parent_b[crossover:]
+        child = list(parent_a)[:crossover] + list(parent_b)[crossover:]
         child = [elt + random.gauss(0, 0.1)
                  if random.random() < 0.01 else elt
                  for elt in child]
-        return child
+        return array(child)
 
     def evaluate(self, individual):
         numWrong = 0.0
-        for datum in self.inputs:
-            logit = dot(individual, datum)
+        logits = dot(self.inputs, individual)
+        for (logit, answer) in zip(logits, self.answers):
             prediction = logistic(logit)
-            if round(datum[-1] - prediction) != 0:
+            if round(answer - prediction) != 0:
                 numWrong += 1
         return (numWrong / len(self.inputs),
                 sum(map(abs, individual)),
@@ -40,9 +40,9 @@ class SkillGP(CascadeGP.CascadeGP):
 def main():
     r = csv.reader(file('step2.csv'))
     titles = r.next()
-    data = [array(map(float, csValues)) for csValues in r]
-    inputs = [datum[:-1] for datum in data]
-    answers = [datum[-1] for datum in data]
+    data = [map(float, csValues) for csValues in r]
+    inputs = array([datum[:-1] for datum in data])
+    answers = array([datum[-1] for datum in data])
 
     gp = SkillGP(inputs, answers)
     gp.run()
