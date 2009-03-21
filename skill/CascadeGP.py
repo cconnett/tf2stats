@@ -13,8 +13,16 @@ TOURNAMENT_SIZE = 10
 GENERATIONS_PER_CASCADE = 10
 
 class CascadeGP(object):
-    def __init__(self):
+    def __init__(self,
+                 archive_size=ARCHIVE_SIZE,
+                 population_size=POPULATION_SIZE,
+                 tournament_size=TOURNAMENT_SIZE,
+                 generations_per_cascade=GENERATIONS_PER_CASCADE):
         self.boredFlag = False
+        self.archive_size = archive_size
+        self.population_size = population_size
+        self.tournament_size = tournament_size
+        self.generations_per_cascade = generations_per_cascade
 
     # To override:
     def new_individual(self):
@@ -41,23 +49,23 @@ class CascadeGP(object):
 
     # Don't override
     def run(self):
-        archive = [self.new_individual() for i in range(ARCHIVE_SIZE)]
+        archive = [self.new_individual() for i in range(self.archive_size)]
         archive = [(self.evaluate(individual), individual)
                    for individual in archive]
 
         while not self.bored():
             print 'Cascade'
-            population = [self.new_individual() for i in range(POPULATION_SIZE)]
+            population = [self.new_individual() for i in range(self.population_size)]
             population = [(self.evaluate(individual), individual)
                           for individual in population]
             next_gen = []
 
-            for generation in range(10):
+            for generation in range(self.generations_per_cascade):
                 print '\tGeneration %d' % generation
-                while len(next_gen) < POPULATION_SIZE:
+                while len(next_gen) < self.population_size:
                     print '\t\tnext_gen size = %3d' % len(next_gen)
-                    archive_tournament = random.sample(archive, TOURNAMENT_SIZE)
-                    population_tournament = random.sample(population, TOURNAMENT_SIZE)
+                    archive_tournament = random.sample(archive, self.tournament_size)
+                    population_tournament = random.sample(population, self.tournament_size)
 
                     self.delete_dominated(archive_tournament)
                     self.delete_dominated(population_tournament)
@@ -71,7 +79,7 @@ class CascadeGP(object):
                         child = self.new_offspring(first_parent[1], second_parent[1])
                         next_gen.append((self.evaluate(child), child))
 
-                        if len(next_gen) == POPULATION_SIZE:
+                        if len(next_gen) == self.population_size:
                             break
                 population = next_gen
                 next_gen = []
