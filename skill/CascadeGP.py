@@ -24,6 +24,8 @@ class CascadeGP(object):
         self.tournament_size = tournament_size
         self.generations_per_cascade = generations_per_cascade
 
+        self.result = []
+
     # To override:
     def new_individual(self):
         raise NotImplemented()
@@ -84,6 +86,8 @@ class CascadeGP(object):
                 population = next_gen
                 next_gen = []
             archive = population
-            self.result = archive
-            print list(sorted(archive))[0]
+            self.result.extend(archive)
+            self.delete_dominated(self.result)
+            print '%d undominated best individuals.' % len(self.result)
+            print list(sorted(self.result))[0][0]
         return archive
