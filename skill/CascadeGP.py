@@ -6,6 +6,7 @@
 #     proc.start()
 
 import random
+import sys
 
 ARCHIVE_SIZE = 50
 POPULATION_SIZE = 50
@@ -56,16 +57,13 @@ class CascadeGP(object):
                    for individual in archive]
 
         while not self.bored():
-            print 'Cascade'
             population = [self.new_individual() for i in range(self.population_size)]
             population = [(self.evaluate(individual), individual)
                           for individual in population]
             next_gen = []
 
             for generation in range(self.generations_per_cascade):
-                print '\tGeneration %d' % generation
                 while len(next_gen) < self.population_size:
-                    print '\t\tnext_gen size = %3d' % len(next_gen)
                     archive_tournament = random.sample(archive, self.tournament_size)
                     population_tournament = random.sample(population, self.tournament_size)
 
@@ -83,11 +81,15 @@ class CascadeGP(object):
 
                         if len(next_gen) == self.population_size:
                             break
+                    sys.stdout.write('\rGeneration %d, next_gen size = %3d' %
+                                     (generation, len(next_gen)))
+                    sys.stdout.flush()
                 population = next_gen
                 next_gen = []
             archive = population
             self.result.extend(archive)
             self.delete_dominated(self.result)
-            print '%d undominated best individuals.' % len(self.result)
+            sys.stdout.write('\r%d undominated best individuals.        \n'
+                             % len(self.result))
             print list(sorted(self.result))[0][0]
         return archive
