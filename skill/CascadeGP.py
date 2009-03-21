@@ -42,10 +42,10 @@ class CascadeGP(object):
         fits = tournament[:]
         for (fit_a, a) in fits:
             for (fit_b, b) in fits:
-                if all(component_a < component_b
+                if all(component_a > component_b
                        for (component_a, component_b) in zip(fit_a, fit_b)):
-                    if (fit_a, a) in tournament:
-                        tournament.remove((fit_a, a))
+                    tournament.remove((fit_a, a))
+                    break
 
     # Don't override
     def run(self):
