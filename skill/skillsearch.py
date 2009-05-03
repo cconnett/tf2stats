@@ -4,6 +4,7 @@ import csv
 import CascadeGP
 import threading
 import random
+import sys
 from numpy import array, zeros, dot
 
 def logistic(x):
@@ -17,27 +18,31 @@ class SkillGP(CascadeGP.CascadeGP):
         self.answers = answers
 
     def new_individual(self):
-        return array([random.gauss(0, 1) for elt in self.inputs[0]])
+        return array([random.gauss(0, 1.5) for elt in self.inputs[0]])
     def new_offspring(self, parent_a, parent_b):
         crossover = random.randrange(len(parent_a))
         child = list(parent_a)[:crossover] + list(parent_b)[crossover:]
-        child = [elt + random.gauss(0, 0.1)
-                 if random.random() < 0.01 else elt
+        child = [elt + random.gauss(0, 0.25)
+                 if random.random() < 0.02 else elt
                  for elt in child]
         return array(child)
 
     def evaluate(self, individual):
         numWrong = 0.0
+        error = 0.0
         logits = dot(self.inputs, individual)
         for (logit, answer) in zip(logits, self.answers):
             prediction = logistic(logit)
+            error += abs(answer - prediction)
             if round(answer - prediction) != 0:
-                numWrong += 1
+                numWrong += 1.0
         return (numWrong / len(self.inputs),
-                sum(map(abs, individual)),
+                error / len(self.inputs),
+                sum(map(abs, individual[:-11])),
                 )
 
 def main():
+    assert len(sys.argv) >= 2
     r = csv.reader(file('step2.csv'))
     titles = r.next()
     data = [map(float, csValues) for csValues in r]
@@ -45,10 +50,12 @@ def main():
     answers = array([datum[-1] for datum in data])
 
     gp = SkillGP(inputs, answers)
-    gp.run()
+    try:
+        gp.run()
+    except BaseException:
+        pass
 
-    for individual in gp.result:
-        print gp.result
+    print >> file(sys.argv[1],'w'), gp.result
 
 if __name__ == '__main__':
     main()

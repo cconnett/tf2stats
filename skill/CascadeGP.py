@@ -8,15 +8,14 @@
 import random
 import sys
 
-ARCHIVE_SIZE = 50
-POPULATION_SIZE = 50
-TOURNAMENT_SIZE = 10
+GROUP_SIZE = 500
+TOURNAMENT_SIZE = 20
 GENERATIONS_PER_CASCADE = 10
 
 class CascadeGP(object):
     def __init__(self,
-                 archive_size=ARCHIVE_SIZE,
-                 population_size=POPULATION_SIZE,
+                 archive_size=GROUP_SIZE,
+                 population_size=GROUP_SIZE,
                  tournament_size=TOURNAMENT_SIZE,
                  generations_per_cascade=GENERATIONS_PER_CASCADE):
         self.boredFlag = False
@@ -81,15 +80,17 @@ class CascadeGP(object):
 
                         if len(next_gen) == self.population_size:
                             break
-                    sys.stdout.write('\rGeneration %d, next_gen size = %3d' %
-                                     (generation, len(next_gen)))
+                    sys.stdout.write('\rGeneration %2d/%2d, next_gen size = %3d/%d' %
+                                     (generation+1, self.generations_per_cascade,
+                                      len(next_gen), self.population_size))
                     sys.stdout.flush()
                 population = next_gen
                 next_gen = []
             archive = population
             self.result.extend(archive)
             self.delete_dominated(self.result)
-            sys.stdout.write('\r%d undominated best individuals.        \n'
+            sys.stdout.write('\r%d undominated individuals.                      \n'
                              % len(self.result))
-            print list(sorted(self.result))[0][0]
-        return archive
+            bestOne = list(sorted(self.result))[0]
+            print bestOne[0]
+        return self.result
