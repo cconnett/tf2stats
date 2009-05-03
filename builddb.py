@@ -1,7 +1,6 @@
 from datetime import datetime
 from pprint import pprint
 from pyparsing import ParseException
-from namedtuple import namedtuple
 import logging
 import sqlite3
 import sys
