@@ -11,7 +11,7 @@ conn = sqlite3.connect('/mnt/stash/tf2.db')
 cursor = conn.cursor()
 
 main_query = """
-select p.steamid, r.series, count(*) as number
+select p.steamid, r.series, r.miniround, count(*) as number
  from events e
  join players p on e.srcplayer = p.steamid
  join lives l on e.srclife = l.id
@@ -24,11 +24,11 @@ select p.steamid, r.series, count(*) as number
 
  and e.time between datetime('%(month)s-01', 'start of month') and datetime('%(month)s-01', '1 month', '-1 second')
 
- group by p.steamid, r.series
+ group by p.steamid, r.series, r.miniround
  """ % locals()
 
 weapon_query = """
-select p.steamid, r.series, count(*) as number
+select p.steamid, r.series, r.miniround, count(*) as number
  from events e
  join players p on e.srcplayer = p.steamid
  join lives l on e.srclife = l.id
@@ -42,11 +42,11 @@ select p.steamid, r.series, count(*) as number
 
  and e.time between datetime('%(month)s-01', 'start of month') and datetime('%(month)s-01', '1 month', '-1 second')
 
- group by p.steamid, r.series
+ group by p.steamid, r.series, r.miniround
 """ % locals()
 
 victim_query = """
-select p.steamid, r.series, count(*) as number
+select p.steamid, r.series, r.miniround, count(*) as number
  from events e
  join players p on e.srcplayer = p.steamid
  join lives l on e.srclife = l.id
@@ -60,7 +60,7 @@ select p.steamid, r.series, count(*) as number
 
  and e.time between datetime('%(month)s-01', 'start of month') and datetime('%(month)s-01', '1 month', '-1 second')
 
- group by p.steamid, r.series
+ group by p.steamid, r.series, r.miniround
 """ % locals()
 
 roles = ['scout', 'soldier', 'pyro',
@@ -101,7 +101,8 @@ def role_honor_scores(role):
         cursor.execute(query, subs)
         data = cursor.fetchall()
         #print len(data)
-        for (steamid, series, number) in data:
+        for (steamid, series, miniround, number) in data:
+            series = str(series) + miniround
             tally[(steamid, series)] += value * number
 
     #pprint(tally)
