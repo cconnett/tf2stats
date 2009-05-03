@@ -24,8 +24,8 @@ curlives = {}
 curteams = {}
 curspecs = {}
 lastkill = None
-lastkillobj = None
-lastkillasst = None
+lastkilledobject = None
+lastkillassist = None
 nextlife = 1
 
 def processLogFile(filename, dbconn):
@@ -34,8 +34,8 @@ def processLogFile(filename, dbconn):
     global curteams
     global curspecs
     global lastkill
-    global lastkillobj
-    global lastkillasst
+    global lastkilledobject
+    global lastkillassist
     global nextlife
 
     cursor = dbconn.cursor()
@@ -140,7 +140,8 @@ def processLogFile(filename, dbconn):
                     if p.startswith('player'):
                         player = actor.parseString(result.pointcaptured[p])
                         cursor.execute(
-                    "insert into events values (NULL, 'pointcaptured', ?, ?, ?, NULL, NULL, NULL, ?, NULL, NULL)",
+                    # point captured has event type id 9
+                    "insert into events values (NULL, 9, ?, ?, ?, NULL, NULL, NULL, ?, NULL, NULL)",
                     (timestamp, player.steamid, curlives[player.steamid][0], curround.id))
 
                 curround.point += 1
@@ -219,17 +220,19 @@ def processLogFile(filename, dbconn):
                     srcplayer = actor.parseString(event.srcplayer).steamid
                     weapon = event.weapon.strip('"') if event.weapon else None
                     obj = event.object.strip('"').lower() if event.object else None
+                    cursor.execute('select id from object_types where object_name = ?', obj)
+                    (obj,) = cursor.fetchone()
 
                     if eventtype in ['killedobject'] and event.assist:
-                        eventtype = 'killobj assist'
-                        parent = lastkillobj
+                        eventtype = 'killedobject assist'
+                        parent = lastkilledobject
 
-                    if eventtype in ['killedobject', 'killobj assist']:
+                    if eventtype in ['killedobject', 'killedobject assist']:
                         vicplayer = actor.parseString(event.objectowner).steamid
                     elif eventtype in ['kill assist', 'domination', 'revenge']:
                         vicplayer = actor.parseString(event.vicplayer).steamid
                         if event.assist: # When person gets dom/rev from their assist, not assists w/ a dom/rev
-                            parent = lastkillasst
+                            parent = lastkillassist
                         else:
                             parent = lastkill
                     elif eventtype in ['captureblocked', 'pointcaptured',
@@ -243,6 +246,8 @@ def processLogFile(filename, dbconn):
                 srclife = curlives[srcplayer][0]
                 viclife, curclass, begin = curlives.get(vicplayer, (None,None,None))
                 if srclife is not None:
+                    cursor.execute('select id from event_types where event_name = ?', eventtype)
+                    (eventtype,) = cursor.fetchone()
                     cursor.execute("insert into events values (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                                    (eventtype, timestamp,
                                     srcplayer, srclife,
@@ -254,9 +259,9 @@ def processLogFile(filename, dbconn):
                 if result.event and result.triggered:
                     # eventtype in scope from the similar branch above
                     if eventtype == 'killedobject':
-                        lastkillobj = cursor.lastrowid
+                        lastkilledobject = cursor.lastrowid
                     if eventtype == 'kill assist':
-                        lastkillasst = cursor.lastrowid
+                        lastkillassist = cursor.lastrowid
 
                 # Insert the life that was ended by this kill/suicide.
                 if result.kill or result.suicide:
