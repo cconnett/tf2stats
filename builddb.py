@@ -246,7 +246,7 @@ def processLogFile(filename, dbconn):
                 srclife = curlives[srcplayer][0]
                 viclife, curclass, begin = curlives.get(vicplayer, (None,None,None))
                 if srclife is not None:
-                    cursor.execute('select id from event_types where event_name = ?', eventtype)
+                    cursor.execute('select id from event_types where event_name = ?', (eventtype,))
                     (eventtype,) = cursor.fetchone()
                     cursor.execute("insert into events values (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                                    (eventtype, timestamp,
