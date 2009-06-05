@@ -218,9 +218,10 @@ def processLogFile(filename, dbconn):
 
                     srcplayer = actor.parseString(event.srcplayer).steamid
                     weapon = event.weapon.strip('"') if event.weapon else None
-                    obj = event.object.strip('"').lower() if event.object else None
-                    cursor.execute('select id from object_types where object_name = ?', obj)
-                    (obj,) = cursor.fetchone()
+                    if event.object:
+                        obj = event.object.strip('"').lower()
+                        cursor.execute('select id from object_types where object_name = ?', (obj,))
+                        (obj,) = cursor.fetchone()
 
                     if eventtype in ['killedobject'] and event.assist:
                         eventtype = 'killedobject assist'
