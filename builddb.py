@@ -27,6 +27,9 @@ lastkilledobject = None
 lastkillassist = None
 nextlife = 1
 
+event_types = {}
+object_types = {}
+
 def processLogFile(filename, dbconn):
     global curround
     global curlives
@@ -36,6 +39,9 @@ def processLogFile(filename, dbconn):
     global lastkilledobject
     global lastkillassist
     global nextlife
+
+    global event_types
+    global object_types
 
     cursor = dbconn.cursor()
     unparsed = file(unparsedfilename + os.path.basename(filename), 'a')
@@ -220,8 +226,7 @@ def processLogFile(filename, dbconn):
                     weapon = event.weapon.strip('"') if event.weapon else None
                     if event.object:
                         obj = event.object.strip('"').lower()
-                        cursor.execute('select id from object_types where object_name = ?', (obj,))
-                        (obj,) = cursor.fetchone()
+                        obj = object_types.get(obj)
 
                     if eventtype in ['killedobject'] and event.assist:
                         eventtype = 'killedobject assist'
@@ -246,8 +251,7 @@ def processLogFile(filename, dbconn):
                 srclife = curlives[srcplayer][0]
                 viclife, curclass, begin = curlives.get(vicplayer, (None,None,None))
                 if srclife is not None:
-                    cursor.execute('select id from event_types where event_name = ?', (eventtype,))
-                    (eventtype,) = cursor.fetchone()
+                    eventtype = event_types.get(eventtype)
                     cursor.execute("insert into events values (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                                    (eventtype, timestamp,
                                     srcplayer, srclife,
@@ -362,10 +366,11 @@ def deb(o):
 def main(logs):
     dbconn = sqlite3.connect('/mnt/stash/tf2.db')
 
-    # Support resuming by fetching the max ids already in use.
     global curround
     global nextlife
     cursor = dbconn.cursor()
+
+    # Support resuming by fetching the max ids already in use.
     cursor.execute('select max(id) from rounds')
     try:
         curround.id = cursor.fetchone()[0] + 1
@@ -382,6 +387,14 @@ def main(logs):
     except TypeError:
         curround.series = 1
     cursor.close()
+
+    # Fetch the object_types and event_types tables and cache in a dictionary.
+    global event_types
+    global object_types
+    cursor.execute('select event_name, id from event_types')
+    event_types = dict(cursor.fetchall())
+    cursor.execute('select object_name, id from object_types')
+    object_types = dict(cursor.fetchall())
 
     for filename in logs:
         sys.stdout.write('Processing ' + filename)
