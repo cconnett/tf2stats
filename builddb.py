@@ -124,7 +124,9 @@ def processLogFile(filename, dbconn):
                 curround.type = 'normal'
 
             if result.pointcaptured:
-                # Record that the round is over and that blue won
+                # Record that the round is over and that the capping
+                # team won.  Note that in payload race, the capping
+                # team may be red.
                 curround.end = timestamp
                 curround.point = int(result.pointcaptured.cp.strip('"')) + 1
                 assert curround.type == 'normal'
@@ -134,7 +136,7 @@ def processLogFile(filename, dbconn):
                                 curround.miniround, curround.type,
                                 curround.point, curround.series,
                                 curround.begin, curround.end, curround.overtime,
-                                True))
+                                result.pointcaptured.team == 'Blue'))
                 cursor.executemany('insert or ignore into roundlives values (?, ?)',
                                    [(curround.id, life)
                                     for (life, curclass, begin) in curlives.values()])

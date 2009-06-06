@@ -26,15 +26,13 @@ event = kill.setResultsName('kill') | \
         triggered_event.setResultsName('triggered') | \
         suicide.setResultsName('suicide')
 
-
-
 line_kinds = {
     'event': event,
 
     'changerole': actor + 'changed role to' + dblQuotedString.setResultsName('newrole'),
     'changeteam': actor + 'joined team "' + team.setResultsName('newteam') + '"',
 
-    'pointcaptured': Literal('Team "Blue"') + 'triggered "pointcaptured"' + parameters,
+    'pointcaptured': Literal('Team "') + team + '"triggered "pointcaptured"' + parameters,
 
     'setupbegin': Literal('World triggered "Mini_Round_Selected" (round') + dblQuotedString.setResultsName('miniround') + ')',
     'setupend': Literal('World triggered "Round_Setup_End"'),
