@@ -32,7 +32,7 @@ line_kinds = {
     'changerole': actor + 'changed role to' + dblQuotedString.setResultsName('newrole'),
     'changeteam': actor + 'joined team "' + team.setResultsName('newteam') + '"',
 
-    'pointcaptured': Literal('Team "') + team + '"triggered "pointcaptured"' + parameters,
+    'pointcaptured': Literal('Team "') + team + '" triggered "pointcaptured"' + parameters,
 
     'setupbegin': Literal('World triggered "Mini_Round_Selected" (round') + dblQuotedString.setResultsName('miniround') + ')',
     'setupend': Literal('World triggered "Round_Setup_End"'),
