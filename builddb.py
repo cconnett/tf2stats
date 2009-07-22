@@ -426,4 +426,10 @@ def main(logs):
     dbconn.close()
 
 if __name__ == '__main__':
+    if sys.version_info[:2] != (2, 5):
+        print >> sys.stderr, "Please run with python 2.5."
+        sys.exit(2)
+    if len(sys.argv) == 1:
+        print >> sys.stderr, "Usage: python builddb.py [logfiles]"
+        sys.exit(2)
     main(sys.argv[1:])
