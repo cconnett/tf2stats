@@ -94,6 +94,11 @@ def processLogFile(filename, dbconn):
                 curround.begin = timestamp
                 curround.type = 'setup'
                 curround.miniround = result.setupbegin.miniround.strip('"').strip('round_')
+
+                if curround.map == 'plr_pipeline' and curround.miniround == '3':
+                    # There is no setup on the third section of pipeline.
+                    curround.type = 'normal'
+
                 try:
                     # For some crazy reason, in *some* cases, the
                     # minirounds are named with numbers instead of
