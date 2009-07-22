@@ -357,7 +357,7 @@ def non_death_end_life(cursor, steamid, team, end, reason):
     global curround
     life, curclass, begin = curlives[steamid]
     if life is not None and begin != end:
-        cursor.execute('insert into lives values (?, ?, ?, ?, ?, ?, ?, ?)',
+        cursor.execute('insert or ignore into lives values (?, ?, ?, ?, ?, ?, ?, ?)',
                        (life, steamid, team, curclass, begin, end, reason, None))
         cursor.execute('insert or ignore into roundlives values (?, ?)',
                        (curround.id, life))
