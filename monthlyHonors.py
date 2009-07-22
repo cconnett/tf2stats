@@ -68,31 +68,31 @@ roles = ['scout', 'soldier', 'pyro',
          'medic', 'sniper', 'spy']
 
 def role_honor_scores(role):
-    event_values = [(main_query, ('kill', role), 1),
-                    (main_query, ('kill assist', role), 0.5),
-                    (main_query, ('pointcaptured', role), 2),
-                    (main_query, ('captureblocked', role), 1),
-                    (main_query, ('killedobject', role), 1),
-                    (main_query, ('killobj assist', role), 1),
-                    (main_query, ('revenge', role), 1),
+    event_values = [(main_query, (5, role), 1), #kill
+                    (main_query, (6, role), 0.5), #kill assist
+                    (main_query, (9, role), 2), #pointcaptured
+                    (main_query, (2, role), 1), #captureblocked
+                    (main_query, (7, role), 1), #killedobject
+                    (main_query, (8, role), 1), #killedobject assist
+                    (main_query, (10, role), 1), #revenge
                     ]
 
     if role == 'medic':
-        event_values.append((main_query, ('chargedeployed', role), 1))
+        event_values.append((main_query, (3, role), 1)) #chargedeployed
 
-        event_values.remove((main_query, ('kill assist', role), 0.5))
-        event_values.append((main_query, ('kill assist', role), 1))
+        event_values.remove((main_query, (6, role), 0.5))
+        event_values.append((main_query, (6, role), 1))
     #if role == 'engineer':
     #    event_values.append((main_query, ('player_teleported', role), 0.5))
     if role == 'scout':
-        event_values.append((victim_query, ('kill', role, 'medic'), 1))
+        event_values.append((victim_query, (5, role, 'medic'), 1))
 
-        event_values.remove((main_query, ('pointcaptured', role), 2))
-        event_values.append((main_query, ('pointcaptured', role), 4))
+        event_values.remove((main_query, (9, role), 2))
+        event_values.append((main_query, (9, role), 4))
     if role == 'sniper':
-        event_values.append((weapon_query, ('kill', role, 'headshot'), 1))
+        event_values.append((weapon_query, (5, role, 'headshot'), 1))
     if role == 'spy':
-        event_values.append((weapon_query, ('kill', role, 'backstab'), 1))
+        event_values.append((weapon_query, (5, role, 'backstab'), 1))
 
     tally = collections.defaultdict(float)
 
