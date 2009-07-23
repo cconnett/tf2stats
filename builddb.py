@@ -277,7 +277,7 @@ def processLogFile(filename, dbconn):
                 # Insert the life that was ended by this kill/suicide.
                 if result.kill or result.suicide:
                     end = timestamp
-                    cursor.execute("insert into lives values (?, ?, ?, ?, ?, ?, ?, ?)",
+                    cursor.execute("insert or ignore into lives values (?, ?, ?, ?, ?, ?, ?, ?)",
                                    (viclife, vicplayer, curteams[vicplayer], curclass,
                                     begin, end, eventtype, lastkill))
                     cursor.execute("insert or ignore into roundlives values (?, ?)",
