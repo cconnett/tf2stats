@@ -1,14 +1,38 @@
+# -*- Encoding: utf-8 -*-
+
 import sqlite3
 from pprint import pprint
 import collections
 import math
+from cStringIO import StringIO
+import codecs
+import sys
+
+debug = False
 
 POWER = math.log(3) / math.log(2)
 
-month = '2009-03'
+month = '2009-06'
 
 conn = sqlite3.connect('/mnt/stash/tf2.db')
 cursor = conn.cursor()
+
+honor_titles = {'scout': 'Swiftest Scout',
+                'soldier': 'Soldier of Valor',
+                'pyro': 'Fire Marshal',
+                'demoman': 'Demolition Expert',
+                'heavyweapons': 'Heroic Heavy',
+                'engineer': 'Chief Engineer',
+                'medic': u'Überlegen Arzt',
+                'sniper': 'Elite Marksman',
+                'spy': 'Master of Disguise',
+                }
+
+# need ordering, so can't use honors_titles.keys()
+roles = ['scout', 'soldier', 'pyro',
+         'demoman', 'heavyweapons', 'engineer',
+         'medic', 'sniper', 'spy'
+    ]
 
 main_query = """
 select p.steamid, r.series, r.miniround, count(*) as number
@@ -63,10 +87,6 @@ select p.steamid, r.series, r.miniround, count(*) as number
  group by p.steamid, r.series, r.miniround
 """ % locals()
 
-roles = ['scout', 'soldier', 'pyro',
-         'demoman', 'heavyweapons', 'engineer',
-         'medic', 'sniper', 'spy']
-
 def role_honor_scores(role):
     event_values = [(main_query, (5, role), 1), #kill
                     (main_query, (6, role), 0.5), #kill assist
@@ -97,10 +117,12 @@ def role_honor_scores(role):
     tally = collections.defaultdict(float)
 
     for (query, subs, value) in event_values:
-        #print 'executing', subs, 'got',
+        if debug:
+            print 'executing', subs, 'got',
         cursor.execute(query, subs)
         data = cursor.fetchall()
-        #print len(data)
+        if debug:
+            print len(data)
         for (steamid, series, miniround, number) in data:
             series = str(series) + miniround
             tally[(steamid, series)] += value * number
@@ -113,6 +135,11 @@ def role_honor_scores(role):
 
     return finalscores
 
+
+forum_post = StringIO()
+top_scores = []
+winners = set()
+
 for role in roles:
     scores = role_honor_scores(role)
     scores = [(score, steamid) for (steamid, score) in scores.items()]
@@ -124,3 +151,19 @@ for role in roles:
         cursor.execute('select name from players where steamid = ?', (steamid,))
         (name,) = cursor.fetchone()
         print '    %32s %8.2f' % (name, score)
+        top_scores.append((score, role, steamid))
+
+honors = dict.fromkeys(honor_titles.keys(), None)
+top_scores.sort(reverse=True)
+for (score, role, steamid) in top_scores:
+    if honors[role] is None and steamid not in winners:
+        honors[role] = steamid
+        winners.add(steamid)
+assert None not in honors.values()
+
+for role in roles:
+    steamid = honors[role]
+    cursor.execute('select name from players where steamid = ?', (steamid,))
+    (name,) = cursor.fetchone()
+    print '[b]' + honor_titles[role] + ':[/b] ' + name + '\n'
+
