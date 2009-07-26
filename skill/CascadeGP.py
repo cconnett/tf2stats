@@ -26,20 +26,19 @@ class CascadeGP(object):
 
         self.result = []
 
-    # To override:
+    # Must override:
     def new_individual(self):
         raise NotImplemented()
     def new_offspring(self, parent_a, parent_b):
+        raise NotImplemented()
+    def evaluate(self, individual):
         raise NotImplemented()
 
     # May override
     def bored(self):
         return self.boredFlag
 
-    # Override one of these.
-    def evaluate(self, individual):
-        raise NotImplemented()
-
+    # Don't override
     def delete_dominated(self, tournament):
         fits = tournament[:]
         for (fit_a, a) in fits:
@@ -49,7 +48,6 @@ class CascadeGP(object):
                     tournament.remove((fit_a, a))
                     break
 
-    # Don't override
     def run(self):
         archive = [self.new_individual() for i in range(self.archive_size)]
         archive = [(self.evaluate(individual), individual)

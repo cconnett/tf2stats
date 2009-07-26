@@ -42,7 +42,8 @@ class SkillGP(CascadeGP.CascadeGP):
                 )
 
 def main():
-    assert len(sys.argv) >= 2
+    if len(sys.argv) != 2:
+        print >> sys.stderr, "Usage: python skillsearch.py output-file"
     r = csv.reader(file('step2.csv'))
     titles = r.next()
     data = [map(float, csValues) for csValues in r]
