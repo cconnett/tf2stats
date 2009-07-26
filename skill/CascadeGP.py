@@ -34,6 +34,12 @@ class CascadeGP(object):
     def evaluate(self, individual):
         raise NotImplemented()
 
+    # Override to get print-outs of fitness against a test set.
+    # System will not optimize against this fitness, it will only
+    # print the fitness for human judges.
+    def evaluateAgainstTestSet(self, individual):
+        raise NotImplemented()
+
     # May override
     def bored(self):
         return self.boredFlag
@@ -89,6 +95,16 @@ class CascadeGP(object):
             self.delete_dominated(self.result)
             sys.stdout.write('\r%d undominated individuals.                      \n'
                              % len(self.result))
+
             bestOne = list(sorted(self.result))[0]
-            print bestOne[0]
+            print 'Evaluated fitness: %r' % bestOne[0]
+
+            try:
+                test_fitnesses = list(sorted(
+                    self.evaluateAgainstTestSet(individual)
+                    for (training_fitness, individual) in self.result))
+                bestOne = test_fitnesses[0]
+                print 'Test set fitness:  %r' % bestOne[0]
+            except NotImplemented:
+                pass
         return self.result
