@@ -7,6 +7,7 @@
 
 import random
 import sys
+from pprint import pprint
 
 GROUP_SIZE = 500
 TOURNAMENT_SIZE = 20
@@ -97,14 +98,16 @@ class CascadeGP(object):
                              % len(self.result))
 
             bestOne = list(sorted(self.result))[0]
-            print 'Training set: %s' % repr(bestOne[0])
+            print 'Training set:'
+            pprint(bestOne[0])
 
             try:
                 test_fitnesses = list(sorted(
                     self.evaluateAgainstTestSet(individual)
                     for (training_fitness, individual) in self.result))
                 bestOne = test_fitnesses[0]
-                print 'Test set: %s' % repr(bestOne[0])
+                print 'Test set:'
+                pprint(bestOne[0])
             except NotImplementedError:
                 pass
         return self.result
