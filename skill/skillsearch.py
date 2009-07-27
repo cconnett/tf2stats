@@ -13,7 +13,6 @@ def logistic(x):
 class SkillGP(CascadeGP.CascadeGP):
     def __init__(self, inputs, answers):
         CascadeGP.CascadeGP.__init__(self)
-        self.boredP = False
         self.inputs = inputs
         self.answers = answers
 
