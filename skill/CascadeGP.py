@@ -104,7 +104,7 @@ class CascadeGP(object):
                     self.evaluateAgainstTestSet(individual)
                     for (training_fitness, individual) in self.result))
                 bestOne = test_fitnesses[0]
-                print 'Test set fitness:  %r' % bestOne[0]
+                print 'Test set fitness:  %r' % (bestOne[0],)
             except NotImplemented:
                 pass
         return self.result
