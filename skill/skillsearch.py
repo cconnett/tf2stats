@@ -13,7 +13,6 @@ def logistic(x):
 class SkillGP(CascadeGP.CascadeGP):
     def __init__(self, inputs, answers):
         CascadeGP.CascadeGP.__init__(self)
-        self.boredP = False
         self.inputs = inputs
         self.answers = answers
 
@@ -28,17 +27,20 @@ class SkillGP(CascadeGP.CascadeGP):
         return array(child)
 
     def evaluate(self, individual):
-        numWrong = 0.0
+        numWrong = 1
         error = 0.0
+        sqError = 0.0
         logits = dot(self.inputs, individual)
         for (logit, answer) in zip(logits, self.answers):
             prediction = logistic(logit)
             error += abs(answer - prediction)
+            sqError += (answer - prediction) ** 2
             if round(answer - prediction) != 0:
-                numWrong += 1.0
-        return (numWrong / len(self.inputs),
-                error / len(self.inputs),
-                sum(map(abs, individual[:-11])),
+                numWrong += 1
+        return (float(numWrong) / len(self.inputs), # pct of wrong instances
+                math.sqrt(sqError / len(self.inputs)), # RMSE
+                error / len(self.inputs), # MAE
+                sum(map(abs, individual[:-11])), # model size
                 )
 
 def main():
@@ -53,7 +55,7 @@ def main():
     gp = SkillGP(inputs, answers)
     try:
         gp.run()
-    except BaseException:
+    except KeyboardInterrupt:
         pass
 
     print >> file(sys.argv[1],'w'), gp.result
