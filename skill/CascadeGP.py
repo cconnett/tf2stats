@@ -28,17 +28,17 @@ class CascadeGP(object):
 
     # Must override:
     def new_individual(self):
-        raise NotImplemented()
+        raise NotImplementedError
     def new_offspring(self, parent_a, parent_b):
-        raise NotImplemented()
+        raise NotImplementedError
     def evaluate(self, individual):
-        raise NotImplemented()
+        raise NotImplementedError
 
     # Override to get print-outs of fitness against a test set.
     # System will not optimize against this fitness, it will only
     # print the fitness for human judges.
     def evaluateAgainstTestSet(self, individual):
-        raise NotImplemented()
+        raise NotImplementedError
 
     # May override
     def bored(self):
@@ -97,14 +97,14 @@ class CascadeGP(object):
                              % len(self.result))
 
             bestOne = list(sorted(self.result))[0]
-            print 'Evaluated fitness: %r' % bestOne[0]
+            print 'Training set: %s' % repr(bestOne[0])
 
             try:
                 test_fitnesses = list(sorted(
                     self.evaluateAgainstTestSet(individual)
                     for (training_fitness, individual) in self.result))
                 bestOne = test_fitnesses[0]
-                print 'Test set fitness:  %r' % (bestOne[0],)
-            except NotImplemented:
+                print 'Test set: %s' % repr(bestOne[0])
+            except NotImplementedError:
                 pass
         return self.result
