@@ -55,7 +55,7 @@ def main():
     gp = SkillGP(inputs, answers)
     try:
         gp.run()
-    except BaseException:
+    except KeyboardInterrupt:
         pass
 
     print >> file(sys.argv[1],'w'), gp.result
