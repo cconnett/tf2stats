@@ -26,7 +26,7 @@ class CascadeGP(object):
         self.generations_per_cascade = generations_per_cascade
 
         self.result = []
-        self.previousResult = []
+        self.previousFitnesses = []
 
     # Must override:
     def new_individual(self):
@@ -102,7 +102,7 @@ class CascadeGP(object):
             # available, the result collection will be kept based on
             # those evaluations.
 
-            # Step 1: Re-evaluate against the test set if available.
+            # Re-evaluate against the test set if available.
             reevaluatedArchive = list(sorted(archive))
             try:
                 reevaluatedArchive = list(sorted(
@@ -111,26 +111,27 @@ class CascadeGP(object):
             except NotImplementedError:
                 pass
 
-            # Step 2: Store the previous result in a separate list.
-            # Merge the re-evaluated archive into result.  Check if result changed.
-            self.previousResult = self.result[:]
+            # Merge the re-evaluated archive into result.  Check if
+            # fitnesses changed.
             self.result.extend(reevaluatedArchive)
-            pprint([elt[0] for elt in self.result])
             self.delete_dominated(self.result)
-            self.result.sort()
-            pprint([elt[0] for elt in self.result])
-            if self.result == self.previousResult:
+            fitnesses = [fitness for (fitness, individual) in self.result]
+            fitnesses.sort()
+
+            if fitnesses == self.previousFitnesses:
                 self.cascadesWithoutImprovement += 1
             else:
                 self.cascadesWithoutImprovement = 0
 
-            # Step 3: Print the number of undominated individuals in
-            # result and the fitness of member of result with the best
-            # first characteristic.  Increment cascade number.
+            # Store the previous fitnesses in a separate list.
+            self.previousFitnesses = fitnesses
+
+            # Print the number of undominated individuals in result
+            # and the fitness of member of result with the best first
+            # characteristic.  Increment cascade number.
             sys.stdout.write('\r%d undominated individuals after cascade %d.     \n'
                              % (len(self.result), cascade))
-            pprint(self.result[0][0])
-            print self.cascadesWithoutImprovement
+            pprint(fitnesses[0])
             cascade += 1
         print 'Improvement has stopped.'
-        return self.result
+        return sorted(self.result, key=lambda (fitness, individual): fitness)
