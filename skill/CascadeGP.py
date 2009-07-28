@@ -19,13 +19,14 @@ class CascadeGP(object):
                  population_size=GROUP_SIZE,
                  tournament_size=TOURNAMENT_SIZE,
                  generations_per_cascade=GENERATIONS_PER_CASCADE):
-        self.boredFlag = False
+        self.cascadesWithoutImprovement = 0
         self.archive_size = archive_size
         self.population_size = population_size
         self.tournament_size = tournament_size
         self.generations_per_cascade = generations_per_cascade
 
         self.result = []
+        self.previousResult = []
 
     # Must override:
     def new_individual(self):
@@ -43,7 +44,7 @@ class CascadeGP(object):
 
     # May override
     def bored(self):
-        return self.boredFlag
+        return self.cascadesWithoutImprovement >= 2
 
     # Don't override
     def delete_dominated(self, tournament):
@@ -60,6 +61,7 @@ class CascadeGP(object):
         archive = [(self.evaluate(individual), individual)
                    for individual in archive]
 
+        cascade = 0
         while not self.bored():
             population = [self.new_individual() for i in range(self.population_size)]
             population = [(self.evaluate(individual), individual)
@@ -92,22 +94,43 @@ class CascadeGP(object):
                 population = next_gen
                 next_gen = []
             archive = population
-            self.result.extend(archive)
-            self.delete_dominated(self.result)
-            sys.stdout.write('\r%d undominated individuals.                      \n'
-                             % len(self.result))
 
-            bestOne = list(sorted(self.result))[0]
-            print 'Training set:'
-            pprint(bestOne[0])
+            # Keep a separate collection of the all-time best
+            # individuals.  We don't need to maintain genetic
+            # diversity here because these don't get recycles back
+            # like the archive does.  If a test set evaluation is
+            # available, the result collection will be kept based on
+            # those evaluations.
 
+            # Step 1: Re-evaluate against the test set if available.
+            reevaluatedArchive = list(sorted(archive))
             try:
-                test_fitnesses = list(sorted(
-                    self.evaluateAgainstTestSet(individual)
-                    for (training_fitness, individual) in self.result))
-                bestOne = test_fitnesses[0]
-                print 'Test set:'
-                pprint(bestOne[0])
+                reevaluatedArchive = list(sorted(
+                    (self.evaluateAgainstTestSet(individual), individual)
+                    for (training_fitness, individual) in archive))
             except NotImplementedError:
                 pass
+
+            # Step 2: Store the previous result in a separate list.
+            # Merge the re-evaluated archive into result.  Check if result changed.
+            self.previousResult = self.result[:]
+            self.result.extend(reevaluatedArchive)
+            pprint([elt[0] for elt in self.result])
+            self.delete_dominated(self.result)
+            self.result.sort()
+            pprint([elt[0] for elt in self.result])
+            if self.result == self.previousResult:
+                self.cascadesWithoutImprovement += 1
+            else:
+                self.cascadesWithoutImprovement = 0
+
+            # Step 3: Print the number of undominated individuals in
+            # result and the fitness of member of result with the best
+            # first characteristic.  Increment cascade number.
+            sys.stdout.write('\r%d undominated individuals after cascade %d.     \n'
+                             % (len(self.result), cascade))
+            pprint(self.result[0][0])
+            print self.cascadesWithoutImprovement
+            cascade += 1
+        print 'Improvement has stopped.'
         return self.result
