@@ -26,7 +26,7 @@ class CascadeGP(object):
         self.generations_per_cascade = generations_per_cascade
 
         self.result = []
-        self.previousFitnesses = []
+        self.previousFitnesses = None
 
     # Must override:
     def new_individual(self):
@@ -44,7 +44,7 @@ class CascadeGP(object):
 
     # May override
     def bored(self):
-        return self.cascadesWithoutImprovement >= 2
+        return self.cascadesWithoutImprovement >= 3
 
     # Don't override
     def delete_dominated(self, tournament):
@@ -115,10 +115,9 @@ class CascadeGP(object):
             # fitnesses changed.
             self.result.extend(reevaluatedArchive)
             self.delete_dominated(self.result)
-            fitnesses = [fitness for (fitness, individual) in self.result]
-            fitnesses.sort()
+            fitnesses = set(fitness for (fitness, individual) in self.result)
 
-            if fitnesses == self.previousFitnesses:
+            if self.previousFitnesses is not None and self.previousFitnesses.issubset(fitnesses):
                 self.cascadesWithoutImprovement += 1
             else:
                 self.cascadesWithoutImprovement = 0
@@ -131,7 +130,7 @@ class CascadeGP(object):
             # characteristic.  Increment cascade number.
             sys.stdout.write('\r%d undominated individuals after cascade %d.     \n'
                              % (len(self.result), cascade))
-            pprint(fitnesses[0])
+            pprint(sorted(list(fitnesses))[0])
             cascade += 1
         print 'Improvement has stopped.'
         return sorted(self.result, key=lambda (fitness, individual): fitness)
