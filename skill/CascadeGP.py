@@ -7,6 +7,7 @@
 
 import random
 import sys
+from pprint import pprint
 
 GROUP_SIZE = 500
 TOURNAMENT_SIZE = 20
@@ -18,28 +19,34 @@ class CascadeGP(object):
                  population_size=GROUP_SIZE,
                  tournament_size=TOURNAMENT_SIZE,
                  generations_per_cascade=GENERATIONS_PER_CASCADE):
-        self.boredFlag = False
+        self.cascadesWithoutImprovement = 0
         self.archive_size = archive_size
         self.population_size = population_size
         self.tournament_size = tournament_size
         self.generations_per_cascade = generations_per_cascade
 
         self.result = []
+        self.previousFitnesses = None
 
-    # To override:
+    # Must override:
     def new_individual(self):
-        raise NotImplemented()
+        raise NotImplementedError
     def new_offspring(self, parent_a, parent_b):
-        raise NotImplemented()
+        raise NotImplementedError
+    def evaluate(self, individual):
+        raise NotImplementedError
+
+    # Override to get print-outs of fitness against a test set.
+    # System will not optimize against this fitness, it will only
+    # print the fitness for human judges.
+    def evaluateAgainstTestSet(self, individual):
+        raise NotImplementedError
 
     # May override
     def bored(self):
-        return self.boredFlag
+        return self.cascadesWithoutImprovement >= 3
 
-    # Override one of these.
-    def evaluate(self, individual):
-        raise NotImplemented()
-
+    # Don't override
     def delete_dominated(self, tournament):
         fits = tournament[:]
         for (fit_a, a) in fits:
@@ -49,12 +56,12 @@ class CascadeGP(object):
                     tournament.remove((fit_a, a))
                     break
 
-    # Don't override
     def run(self):
         archive = [self.new_individual() for i in range(self.archive_size)]
         archive = [(self.evaluate(individual), individual)
                    for individual in archive]
 
+        cascade = 0
         while not self.bored():
             population = [self.new_individual() for i in range(self.population_size)]
             population = [(self.evaluate(individual), individual)
@@ -87,10 +94,43 @@ class CascadeGP(object):
                 population = next_gen
                 next_gen = []
             archive = population
-            self.result.extend(archive)
+
+            # Keep a separate collection of the all-time best
+            # individuals.  We don't need to maintain genetic
+            # diversity here because these don't get recycles back
+            # like the archive does.  If a test set evaluation is
+            # available, the result collection will be kept based on
+            # those evaluations.
+
+            # Re-evaluate against the test set if available.
+            reevaluatedArchive = list(sorted(archive))
+            try:
+                reevaluatedArchive = list(sorted(
+                    (self.evaluateAgainstTestSet(individual), individual)
+                    for (training_fitness, individual) in archive))
+            except NotImplementedError:
+                pass
+
+            # Merge the re-evaluated archive into result.  Check if
+            # fitnesses changed.
+            self.result.extend(reevaluatedArchive)
             self.delete_dominated(self.result)
-            sys.stdout.write('\r%d undominated individuals.                      \n'
-                             % len(self.result))
-            bestOne = list(sorted(self.result))[0]
-            print bestOne[0]
-        return self.result
+            fitnesses = set(fitness for (fitness, individual) in self.result)
+
+            if self.previousFitnesses is not None and self.previousFitnesses.issubset(fitnesses):
+                self.cascadesWithoutImprovement += 1
+            else:
+                self.cascadesWithoutImprovement = 0
+
+            # Store the previous fitnesses in a separate list.
+            self.previousFitnesses = fitnesses
+
+            # Print the number of undominated individuals in result
+            # and the fitness of member of result with the best first
+            # characteristic.  Increment cascade number.
+            sys.stdout.write('\r%d undominated individuals after cascade %d.     \n'
+                             % (len(self.result), cascade))
+            pprint(sorted(list(fitnesses))[0])
+            cascade += 1
+        print 'Improvement has stopped.'
+        return sorted(self.result, key=lambda (fitness, individual): fitness)

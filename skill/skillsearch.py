@@ -12,10 +12,13 @@ def logistic(x):
 
 class SkillGP(CascadeGP.CascadeGP):
     def __init__(self, inputs, answers):
+        assert len(inputs) == len(answers)
         CascadeGP.CascadeGP.__init__(self)
-        self.boredP = False
         self.inputs = inputs
         self.answers = answers
+        self.testIndices = set(
+            random.sample(range(len(self.inputs)),
+                          int(round(float(len(self.inputs))/8))))
 
     def new_individual(self):
         return array([random.gauss(0, 1.5) for elt in self.inputs[0]])
@@ -27,22 +30,31 @@ class SkillGP(CascadeGP.CascadeGP):
                  for elt in child]
         return array(child)
 
-    def evaluate(self, individual):
-        numWrong = 0.0
-        error = 0.0
+    def evaluate(self, individual, againstTestSet=False):
+        if againstTestSet:
+            numCases = len(self.testIndices)
+        else:
+            numCases = len(self.inputs) - len(self.testIndices)
+        numWrong = 0
+        sqError = 0.0
         logits = dot(self.inputs, individual)
-        for (logit, answer) in zip(logits, self.answers):
+        for (i, (logit, answer)) in enumerate(zip(logits, self.answers)):
+            if againstTestSet ^ (i in self.testIndices):
+                continue
             prediction = logistic(logit)
-            error += abs(answer - prediction)
+            sqError += (answer - prediction) ** 2
             if round(answer - prediction) != 0:
-                numWrong += 1.0
-        return (numWrong / len(self.inputs),
-                error / len(self.inputs),
-                sum(map(abs, individual[:-11])),
+                numWrong += 1
+        return (float(numWrong) / numCases, # pct of wrong instances
+                math.sqrt(sqError / numCases), # RMSE
+                sum(map(abs, individual[:-11])), # model size
                 )
+    def evaluateAgainstTestSet(self, individual):
+        return self.evaluate(individual, againstTestSet = True)
 
 def main():
-    assert len(sys.argv) >= 2
+    if len(sys.argv) != 2:
+        print >> sys.stderr, "Usage: python skillsearch.py output-file"
     r = csv.reader(file('step2.csv'))
     titles = r.next()
     data = [map(float, csValues) for csValues in r]
@@ -52,8 +64,8 @@ def main():
     gp = SkillGP(inputs, answers)
     try:
         gp.run()
-    except BaseException:
-        pass
+    except KeyboardInterrupt:
+        sys.stdout.write('\n')
 
     print >> file(sys.argv[1],'w'), gp.result
 
