@@ -427,7 +427,8 @@ def main(dbfilename, logs):
 
 if __name__ == '__main__':
     if sys.version_info[:2] != (2, 5):
-        print >> sys.stderr, "Please run with python 2.5."
+        print >> sys.stderr, "Please run with Python 2.5."
+        print >> sys.stderr, "Python 2.6 wants unicode, for which this program is not written."
         sys.exit(2)
     if len(sys.argv[1:]) < 2:
         print >> sys.stderr, 'Usage: python builddb.py filename.db [logfiles]'
