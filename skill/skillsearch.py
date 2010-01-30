@@ -47,7 +47,11 @@ class SkillGP(CascadeGP.CascadeGP):
                 numWrong += 1
         return (float(numWrong) / numCases, # pct of wrong instances
                 math.sqrt(sqError / numCases), # RMSE
-                sum(map(abs, individual[:-11])), # model size
+                sum(map(abs, individual[:-11])) +
+                sum(map(abs, individual[-11:])) / 4, # model size
+                # The division by 4 says allow the point's coefficient
+                # to be roughly equivalent to four players worth of
+                # skill coefficients.
                 )
     def evaluateAgainstTestSet(self, individual):
         return self.evaluate(individual, againstTestSet = True)
@@ -58,6 +62,9 @@ def main():
     r = csv.reader(file('step2.csv'))
     titles = r.next()
     data = [map(float, csValues) for csValues in r]
+    #data = [datum for datum in data if any(datum[-12:-8])] # badwater rounds only
+    #data = [datum for datum in data if any([datum[-8],datum[-6],datum[-4],datum[-3]])] # goldrush easy rounds only
+    #data = [datum for datum in data if any([datum[-7],datum[-5],datum[-2]])] # goldrush hard rounds only
     inputs = array([datum[:-1] for datum in data])
     answers = array([datum[-1] for datum in data])
 

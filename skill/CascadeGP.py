@@ -9,8 +9,8 @@ import random
 import sys
 from pprint import pprint
 
-GROUP_SIZE = 500
-TOURNAMENT_SIZE = 20
+GROUP_SIZE = 250
+TOURNAMENT_SIZE = 24
 GENERATIONS_PER_CASCADE = 10
 
 class CascadeGP(object):
