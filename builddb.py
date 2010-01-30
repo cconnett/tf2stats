@@ -370,8 +370,8 @@ def non_death_end_life(cursor, steamid, team, end, reason):
 def deb(o):
     print str(type(o)) + ": " + repr(o)
 
-def main(logs):
-    dbconn = sqlite3.connect('/mnt/stash/tf2.db')
+def main(dbfilename, logs):
+    dbconn = sqlite3.connect(dbfilename)
 
     global curround
     global nextlife
@@ -429,7 +429,7 @@ if __name__ == '__main__':
     if sys.version_info[:2] != (2, 5):
         print >> sys.stderr, "Please run with python 2.5."
         sys.exit(2)
-    if len(sys.argv) == 1:
-        print >> sys.stderr, "Usage: python builddb.py [logfiles]"
+    if len(sys.argv[1:]) < 2:
+        print >> sys.stderr, 'Usage: python builddb.py filename.db [logfiles]'
         sys.exit(2)
-    main(sys.argv[1:])
+    main(sys.argv[1], sys.argv[2:])
