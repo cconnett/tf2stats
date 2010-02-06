@@ -34,17 +34,22 @@ line_kinds = {
 
     'pointcaptured': Literal('Team "') + team + '" triggered "pointcaptured"' + parameters,
 
-    'setupbegin': Literal('World triggered "Mini_Round_Selected" (round') + dblQuotedString.setResultsName('miniround') + ')',
+    'miniroundselected': Literal('World triggered "Mini_Round_Selected" (round') + dblQuotedString.setResultsName('miniround') + ')',
+    'setupbegin': Literal('World triggered "Round_Setup_Begin"'),
     'setupend': Literal('World triggered "Round_Setup_End"'),
-    'humiliationbegin': Literal('World triggered "Mini_Round_Win"') + parameters,
-    'humiliationend': Literal('World triggered "Round_Setup_Begin"') | Literal('World triggered "Game_Over"'),
+    'gameover': Literal('World triggered "Game_Over"'),
     'overtime': Literal('World triggered "Round_Overtime"'),
+    'roundstart': Literal('World triggered "Round_Start"'),
+    'roundwin': Literal('World triggered "Round_Win"') + parameters,
+    'roundlength': Literal('World triggered "Round_Length"') + parameters,
+    'miniroundwin': Literal('World triggered "Mini_Round_Win"') + parameters,
 
     'enter': actor.setResultsName('newplayer') + 'entered the game',
     'leave': actor.setResultsName('quitter') + 'disconnected (reason ' + reason + ')',
     'changename': actor + 'changed name to' + dblQuotedString.setResultsName('newplayer'),
 
     'loadmap': Literal('Loading map "') + Regex(r'\w+').setResultsName('mapname') + '"',
+    'newlogfile': Literal('Log file started') + parameters,
 }
 timestamp = Regex(r'\d{2}/\d{2}/\d{4} - \d{2}:\d{2}:\d{2}:')
 logline = (Literal('L ').suppress() +

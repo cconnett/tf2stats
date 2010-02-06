@@ -89,11 +89,11 @@ def processLogFile(filename, dbconn):
             # newer logs.  In my logs there are no mention of actual
             # teleport events, or teleporter or dispenser upgrades.)
 
-            if result.setupbegin:
+            if result.miniroundselected:
                 curround.overtime = None
                 curround.begin = timestamp
                 curround.type = 'setup'
-                curround.miniround = result.setupbegin.miniround.strip('"').strip('round_')
+                curround.miniround = result.miniroundselected.miniround.strip('"').strip('round_')
 
                 if curround.map == 'plr_pipeline' and curround.miniround == '3':
                     # There is no setup on the third section of pipeline.
@@ -307,7 +307,7 @@ def processLogFile(filename, dbconn):
                     non_death_end_life(cursor, steamid, curteams[steamid], timestamp, 'miniroundend')
                     curlife, curclass, begin = curlives[steamid]
                     curlives[steamid] = (None, curclass, timestamp)
-            if result.setupbegin:
+            if result.miniroundselected:
                 for steamid in curlives:
                     curlife, curclass, begin = curlives[steamid]
                     curlives[steamid] = (nextlife, curclass, timestamp)
