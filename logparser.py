@@ -40,6 +40,7 @@ line_kinds = {
     'gameover': Literal('World triggered "Game_Over"'),
     'overtime': Literal('World triggered "Round_Overtime"'),
     'roundstart': Literal('World triggered "Round_Start"'),
+    'roundstalemate': Literal('World triggered "Round_Stalemate"'),
     'roundwin': Literal('World triggered "Round_Win"') + parameters,
     'roundlength': Literal('World triggered "Round_Length"') + parameters,
     'miniroundwin': Literal('World triggered "Mini_Round_Win"') + parameters,
