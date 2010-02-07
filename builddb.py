@@ -48,6 +48,9 @@ def processLogFile(filename, dbconn):
     errors = file(errorsfilename + os.path.basename(filename), 'a')
     errorcount = 0
 
+    # Start with a guess of the map being played in this file.
+    curround.map = guess_map_name(filename)
+
     for line in file(filename):
         #print line
         try:
@@ -341,7 +344,7 @@ def processLogFile(filename, dbconn):
                 elif result.changename:
                     steamid = result.changename.steamid
                     name = eval(result.changename.newplayer)
-                cursor.execute('select count(name) from players where steamid = ?', (newplayer.steamid,))
+                cursor.execute('select count(name) from players where steamid = ?', (steamid,))
                 if cursor.fetchone()[0] == 0:
                     cursor.execute('insert into players values (?, ?)',
                                    (steamid, name))
