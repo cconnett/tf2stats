@@ -367,7 +367,7 @@ def main(dbfilename, logs):
     except TypeError:
         pugid = 1
 
-    lostpugs = 0
+    badpugs = 0
     successfulpugs = 0
 
     for filename in logs:
@@ -379,7 +379,7 @@ def main(dbfilename, logs):
             print
             print '\t Bad pug!'
             dbconn.rollback()
-            lostpugs += 1
+            badpugs += 1
         except NotAPugException, e:
             pass
         else:
@@ -398,8 +398,8 @@ def main(dbfilename, logs):
     dbconn.commit()
     dbconn.close()
     sys.stdout.write('done.\n')
-    if lostpugs > 0:
-        print 'Lost %d pugs.' % lostpugs
+    if badpugs > 0:
+        print '%d bad pugs.' % badpugs
     print 'Successfully processed %d pugs.' % successfulpugs
 
 if __name__ == '__main__':
