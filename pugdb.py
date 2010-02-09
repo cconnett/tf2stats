@@ -61,11 +61,22 @@ def processLogFile(filename, dbconn):
     except TypeError:
         nextlife = 1
 
+    cursor.execute('select max(id) from pugs')
+    try:
+        pugid = cursor.fetchone()[0] + 1
+    except TypeError:
+        pugid = 1
+
+    # TODO: Come up with the best guesses for all the attributes of
+    # the current match.  Map, top 12 players and their classes and
+    # teams.
+
     # Guess the map being played in this file.
     curround.map = mapguesser.guess_map_name(filename)
     if curround.map is None:
         logging.info("Failed to guess map for file '%s'" % filename)
         return errorcount
+
     curlives = {}
     curteams = {}
 
@@ -170,11 +181,12 @@ def processLogFile(filename, dbconn):
 
             if result.roundwin or result.roundstalemate:
                 assert curround.type == 'normal'
-                cursor.execute('insert into rounds values (?, ?, ?, ?, ?, ?, ?)',
+                cursor.execute('insert into rounds values (?, ?, ?, ?, ?, ?, ?, ?)',
                                (curround.id, curround.map, curround.type,
                                 result.roundwin.winner.strip('"') if result.roundwin else None,
                                 curround.begin, timestamp,
-                                'capture' if result.roundwin else 'stalemate'))
+                                'capture' if result.roundwin else 'stalemate',
+                                pugid))
                 cursor.executemany('insert or ignore into fightlives values (?, ?)',
                                    [(curfight.id, life)
                                     for (life, curclass, begin) in curlives.values()])
@@ -280,7 +292,7 @@ def processLogFile(filename, dbconn):
             if result.changeteam:
                 steamid = result.changeteam.steamid
                 if result.changeteam.newteam in ['Red', 'Blue']:
-                    curteams[steamid] = result.changeteam.newteam.lower()
+                    curteams[steamid] = result.changeteam.newteam
             if result.roundstart or result.gameover:
                 for steamid in curlives:
                     non_death_end_life(cursor, steamid, curteams[steamid], timestamp, 'roundend',
@@ -331,6 +343,7 @@ def processLogFile(filename, dbconn):
             print line
             errorcount += 1
             raise
+    # TODO: compute winner of pug and insert entry into pugs table
     return errorcount
 
 def non_death_end_life(cursor, steamid, team, end, reason, curlives, curfight):
