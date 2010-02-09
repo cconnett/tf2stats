@@ -361,7 +361,7 @@ def main(dbfilename, logs):
     global object_types
     object_types = dict(cursor.fetchall())
 
-    cursor.execute('select max(id) from pugs')
+    cursor.execute('select max(pug) from rounds')
     try:
         pugid = cursor.fetchone()[0] + 1
     except TypeError:
