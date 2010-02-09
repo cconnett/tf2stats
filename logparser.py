@@ -10,9 +10,7 @@ actor = player
 reason = Regex(r'".*"')
 
 parameters = dictOf(Literal('(').suppress() + Regex(r'\w+'),
-                    (dblQuotedString + Literal(')').suppress()) |
-                    (player + Literal(')').suppress())
-                    )
+                    (dblQuotedString + Literal(')').suppress()))
 
 kill = actor.setResultsName('killer') + 'killed' + actor.setResultsName('victim') + \
        'with' + dblQuotedString.setResultsName('weapon') + parameters
