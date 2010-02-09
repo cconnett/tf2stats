@@ -28,7 +28,7 @@ class Fight(object):
 event_types = {}
 object_types = {}
 
-def processLogFile(filename, dbconn):
+def processLogFile(filename, dbconn, pugid):
     global event_types
     global object_types
     cursor = dbconn.cursor()
@@ -60,12 +60,6 @@ def processLogFile(filename, dbconn):
         nextlife = cursor.fetchone()[0] + 1
     except TypeError:
         nextlife = 1
-
-    cursor.execute('select max(id) from pugs')
-    try:
-        pugid = cursor.fetchone()[0] + 1
-    except TypeError:
-        pugid = 1
 
     # TODO: Come up with the best guesses for all the attributes of
     # the current match.  Map, top 12 players and their classes and
@@ -333,7 +327,6 @@ def processLogFile(filename, dbconn):
                     cursor.execute('update players set name = ? where steamid = ?',
                                    (name, steamid))
         except KeyError, ke:
-            print ke
             errorcount += 1
             break
         except Exception, e:
@@ -369,17 +362,33 @@ def main(dbfilename, logs):
     global object_types
     object_types = dict(cursor.fetchall())
 
+    cursor.execute('select max(id) from pugs')
+    try:
+        pugid = cursor.fetchone()[0] + 1
+    except TypeError:
+        pugid = 1
+
+    lostpugs = 0
+    successfulpugs = 0
+
     for filename in logs:
         sys.stdout.write('Processing ' + filename)
         sys.stdout.flush()
-        errorcount = processLogFile(filename, dbconn)
-        if errorcount != 0:
+        errorcount = processLogFile(filename, dbconn, pugid)
+        if errorcount > 0:
             print
             print '\t\terrors = %d' % errorcount
+            dbconn.rollback()
+            lostpugs += 1
         else:
             sys.stdout.write('\r')
-    dbconn.commit()
-    sys.stdout.write('\nCleaning up')
+            dbconn.commit()
+            successfulpugs += 1
+            pugid += 1
+    sys.stdout.write('\nCleaning up\n')
+    if lostpugs > 0:
+        print 'Lost %d pugs.' % lostpugs
+    print 'Successfully processed %d pugs.' % successfulpugs
     # Clean out lives of 0 seconds.
     cursor.execute('delete from lives where begin = end')
     # Clean up wrong viclife entry on assists, dominations, and
