@@ -24,6 +24,9 @@ class Fight(object):
         for s,v in zip(Fight.__slots__, args):
             setattr(self, s, v)
 
+class BadPugException(Exception): pass
+class NotAPugException(Exception): pass
+
 # Fetch the object_types and event_types tables and cache in a dictionary.
 event_types = {}
 object_types = {}
@@ -69,7 +72,7 @@ def processLogFile(filename, dbconn, pugid):
     curround.map = mapguesser.guess_map_name(filename)
     if curround.map is None:
         logging.info("Failed to guess map for file '%s'" % filename)
-        return errorcount
+        raise NotAPugException()
 
     curlives = {}
     curteams = {}
@@ -327,17 +330,13 @@ def processLogFile(filename, dbconn, pugid):
                     cursor.execute('update players set name = ? where steamid = ?',
                                    (name, steamid))
         except KeyError, ke:
-            errorcount += 1
-            break
+            raise BadPugException(ke)
         except Exception, e:
             print >> errors, e
             print >> errors, line
-            print e
-            print line
-            errorcount += 1
+            #print e
+            #print line
             raise
-    # TODO: compute winner of pug and insert entry into pugs table
-    return errorcount
 
 def non_death_end_life(cursor, steamid, team, end, reason, curlives, curfight):
     life, curclass, begin = curlives[steamid]
@@ -374,21 +373,22 @@ def main(dbfilename, logs):
     for filename in logs:
         sys.stdout.write('Processing ' + filename)
         sys.stdout.flush()
-        errorcount = processLogFile(filename, dbconn, pugid)
-        if errorcount > 0:
+        try:
+            processLogFile(filename, dbconn, pugid)
+        except BadPugException, e:
             print
-            print '\t\terrors = %d' % errorcount
+            print '\t Bad pug!'
             dbconn.rollback()
             lostpugs += 1
+        except NotAPugException, e:
+            pass
         else:
-            sys.stdout.write('\r')
             dbconn.commit()
             successfulpugs += 1
             pugid += 1
-    sys.stdout.write('\nCleaning up\n')
-    if lostpugs > 0:
-        print 'Lost %d pugs.' % lostpugs
-    print 'Successfully processed %d pugs.' % successfulpugs
+        finally:
+            sys.stdout.write('\r')
+    sys.stdout.write('\nCleaning up... ')
     # Clean out lives of 0 seconds.
     cursor.execute('delete from lives where begin = end')
     # Clean up wrong viclife entry on assists, dominations, and
@@ -397,6 +397,10 @@ def main(dbfilename, logs):
     where type in ('kill assist','domination','revenge')""")
     dbconn.commit()
     dbconn.close()
+    sys.stdout.write('done.\n')
+    if lostpugs > 0:
+        print 'Lost %d pugs.' % lostpugs
+    print 'Successfully processed %d pugs.' % successfulpugs
 
 if __name__ == '__main__':
     if sys.version_info[:2] != (2, 5):
