@@ -28,9 +28,14 @@ class Fight(object):
 event_types = {}
 object_types = {}
 
+nextlife = None
+
 def processLogFile(filename, dbconn):
     global event_types
     global object_types
+
+    global nextlife
+
     cursor = dbconn.cursor()
     unparsed = file(unparsedfilename + os.path.basename(filename), 'a')
     errors = file(errorsfilename + os.path.basename(filename), 'a')
@@ -92,6 +97,19 @@ def processLogFile(filename, dbconn):
             if result.newlogfile:
                 curround.begin = timestamp
                 curround.type = 'pregame'
+                curfight.begin = timestamp
+
+            if result.kill or result.suicide or result.triggered:
+                event = result.kill or result.suicide or result.triggered
+                weapon = event.weapon.strip('"')
+                if result.kill:
+                    ensure_player_has_state(result.kill.killer, timestamp, weapon, curlives, curteams)
+                    ensure_player_has_state(result.kill.victim, timestamp, weapon, curlives, curteams)
+                if result.suicide:
+                    ensure_player_has_state(result.suicide.suicider, timestamp, weapon, curlives, curteams)
+                if result.triggered:
+                    ensure_player_has_state(result.triggered.srcplayer, timestamp, weapon, curlives, curteams)
+                    ensure_player_has_state(result.triggered.vicplayer, timestamp, weapon, curlives, curteams)
 
             # START OF ROUND/FIGHT TRACKING
             if result.roundstart:
@@ -353,6 +371,20 @@ def non_death_end_life(cursor, steamid, team, end, reason, curlives, curfight):
                        (life, steamid, team, curclass, begin, end, reason, None))
         cursor.execute('insert or ignore into fightlives values (?, ?)',
                        (curfight.id, life))
+
+weapons = file('weapons', 'a')
+def ensure_player_has_state(player, timestamp, weapon, curlives, curteams):
+    global nextlife
+    try:
+        player = actor.parseString(player)
+    except ParseException:
+        return
+    print >> weapons, weapon
+    if player.steamid not in curlives:
+        curlives[player.steamid] = (nextlife, None, timestamp)
+        nextlife += 1 ###incr
+    if player.steamid not in curteams:
+        curteams[player.steamid] = player.team
 
 def deb(o):
     print str(type(o)) + ": " + repr(o)
