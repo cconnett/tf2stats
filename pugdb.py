@@ -300,7 +300,7 @@ def processLogFile(filename, dbconn, pugid):
             if result.leave:
                     quitter = actor.parseString(result.leave.quitter)
                     try:
-                        non_death_end_life(cursor, quitter.steamid, quitter.team.lower(), timestamp, 'leaveserver',
+                        non_death_end_life(cursor, quitter.steamid, quitter.team, timestamp, 'leaveserver',
                                            curlives, curfight)
                     except KeyError, sqlite3.IntegrityError:
                         pass
@@ -342,7 +342,7 @@ def non_death_end_life(cursor, steamid, team, end, reason, curlives, curfight):
     life, curclass, begin = curlives[steamid]
     if life is not None and begin != end:
         cursor.execute('insert or ignore into lives values (?, ?, ?, ?, ?, ?, ?, ?)',
-                       (life, steamid, team, curclass, begin, end, reason, None))
+                       (life, steamid, team.title(), curclass, begin, end, reason, None))
         cursor.execute('insert or ignore into fightlives values (?, ?)',
                        (curfight.id, life))
 
