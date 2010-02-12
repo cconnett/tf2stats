@@ -6,6 +6,7 @@ import sqlite3
 import sys
 import os
 import mapguesser
+import itertools
 
 from logparser import *
 
@@ -31,10 +32,9 @@ class NotAPugException(Exception): pass
 event_types = {}
 object_types = {}
 
-def processLogFile(filename, dbconn, pugid):
+def processLogFile(filename, cursor, pugid):
     global event_types
     global object_types
-    cursor = dbconn.cursor()
     unparsed = file(unparsedfilename + os.path.basename(filename), 'a')
     errors = file(errorsfilename + os.path.basename(filename), 'a')
     errorcount = 0
@@ -60,13 +60,9 @@ def processLogFile(filename, dbconn, pugid):
 
     cursor.execute('select max(id) from lives')
     try:
-        nextlife = cursor.fetchone()[0] + 1
+        nextlife = itertools.count(cursor.fetchone()[0] + 1)
     except TypeError:
-        nextlife = 1
-
-    # TODO: Come up with the best guesses for all the attributes of
-    # the current match.  Map, top 12 players and their classes and
-    # teams.
+        nextlife = itertools.count(1)
 
     # Guess the map being played in this file.
     curround.map = mapguesser.guess_map_name(filename)
@@ -89,16 +85,44 @@ def processLogFile(filename, dbconn, pugid):
             if result.newlogfile:
                 curround.begin = timestamp
                 curround.type = 'pregame'
+                curfight.begin = timestamp
 
             # START OF ROUND/FIGHT TRACKING
-            if result.roundstart:
-                #curround.id += 1 ###incr
-                curround.type = 'normal'
-                curround.begin = timestamp
+            if result.roundstart or result.gameover:
+                # End the lives of anyone not killed in humiliation.
+                for steamid in curlives:
+                    end_life(cursor, steamid, curteams[steamid], timestamp,
+                             'roundend', curlives, curround)
+                    curlife, curclass, begin = curlives[steamid]
+                    curlives[steamid] = (nextlife.next(), curclass, timestamp)
 
-                curfight.begin = timestamp
+                # End the pregame fight/round or the humiliation fight
+                # of the previous round.
+                if curround.type == 'pregame':
+                    end_fight(cursor, curlives, curfight, curround,
+                              timestamp, None,
+                              humiliation=False)
+                    end_round(cursor, curlives, curround,
+                              timestamp, None, 'gamestart', pugid)
+                elif curround.type == 'normal':
+                    # The humiliation fight gets attached to the
+                    # previous round.
+                    end_fight(cursor, curlives, curfight, curround,
+                              timestamp, None,
+                              humiliation=True)
+                    # No separate round just for the humiliation fight.
+
+                if result.gameover:
+                    # Finish all processing of this pug log file.
+                    return
+
+                curround.type = 'normal'
                 curfight.midowner = None
                 curfight.point = 3
+
+                curround.id += 1
+                curround.begin = timestamp
+
 
             if result.setupbegin:
                 curfight.begin = timestamp
@@ -106,30 +130,15 @@ def processLogFile(filename, dbconn, pugid):
 
             if result.setupend:
                 # Record the setup fight
-                cursor.execute('insert into fights values (?, ?, ?, ?, ?, ?, ?, ?)',
-                               (curfight.id, curround.id, curround.map,
-                                curfight.midowner, curfight.point, None,
-                                curfight.begin, timestamp))
-                cursor.executemany('insert or ignore into fightlives values (?, ?)',
-                                   [(curfight.id, life)
-                                    for (life, curclass, begin) in curlives.values()])
-
-                curfight.id += 1 ###incr
-                curfight.begin = timestamp
-                curfight.midowner = None
+                end_fight(cursor, curlives, curfight, curround,
+                          timestamp, None, humiliation=False)
 
             if result.pointcaptured:
                 # Record that current fight is over and that the
                 # capping team won.
                 assert curfight.point is not None
-                cursor.execute('insert into fights values (?, ?, ?, ?, ?, ?, ?, ?)',
-                               (curfight.id, curround.id, curround.map,
-                                curfight.midowner, curfight.point,
-                                result.pointcaptured.team,
-                                curfight.begin, timestamp))
-                cursor.executemany('insert or ignore into fightlives values (?, ?)',
-                                   [(curfight.id, life)
-                                    for (life, curclass, begin) in curlives.values()])
+                end_fight(cursor, curlives, curfight, curround, timestamp,
+                          result.pointcaptured.team, humiliation=False)
 
                 # Record the capturers
                 for p in result.pointcaptured.keys():
@@ -173,32 +182,17 @@ def processLogFile(filename, dbconn, pugid):
                     # will be a roundwin event and a roundstart for
                     # next round.
                     pass
-                curfight.id += 1 ###incr
+                curfight.id += 1
                 curfight.begin = timestamp
 
             if result.roundwin or result.roundstalemate:
                 assert curround.type == 'normal'
-                cursor.execute('insert into rounds values (?, ?, ?, ?, ?, ?, ?, ?)',
-                               (curround.id, curround.map, curround.type,
-                                result.roundwin.winner.strip('"') if result.roundwin else None,
-                                curround.begin, timestamp,
-                                'capture' if result.roundwin else 'stalemate',
-                                pugid))
-                cursor.executemany('insert or ignore into fightlives values (?, ?)',
-                                   [(curfight.id, life)
-                                    for (life, curclass, begin) in curlives.values()])
                 if result.roundstalemate:
-                    cursor.execute('insert into fights values (?, ?, ?, ?, ?, ?, ?, ?)',
-                                   (curfight.id, curround.id, curround.map,
-                                    curfight.midowner, curfight.point,
-                                    None,
-                                    curfight.begin, timestamp))
-                    curfight.id += 1 ###incr
-                curround.id += 1 ###incr
-
-            # END OF ROUND/FIGHT TRACKING
-
-            # START OF LIFE TRACKING
+                    end_fight(cursor, curlives, curfight, curround, timestamp, None,
+                              humiliation=False)
+                end_round(cursor, curlives, curround, timestamp,
+                          result.roundwin.winner.strip('"') if result.roundwin else None,
+                          'capture' if result.roundwin else 'stalemate', pugid)
 
             if result.event:
                 obj = None
@@ -270,38 +264,34 @@ def processLogFile(filename, dbconn, pugid):
                 # Insert the life that was ended by this kill/suicide.
                 if result.kill or result.suicide:
                     end = timestamp
-                    cursor.execute("insert or ignore into lives values (?, ?, ?, ?, ?, ?, ?, ?)",
+                    cursor.execute("insert or ignore into lives values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                                    (viclife, vicplayer, curteams[vicplayer], curclass,
-                                    begin, end, eventtype, lastkill))
-                    cursor.execute("insert or ignore into fightlives values (?, ?)",
-                                   (curfight.id, viclife))
-                    curlives[vicplayer] = (nextlife, curclass, timestamp)
-                    nextlife += 1
+                                    begin, end, eventtype, lastkill, curround.id))
+                    #cursor.execute("insert or ignore into roundlives values (?, ?)",
+                    #               (curround.id, viclife))
+                    curlives[vicplayer] = (nextlife.next(), curclass, timestamp)
 
             if result.changerole:
                 steamid = result.changerole.steamid
                 newrole = result.changerole.newrole.strip('"')
                 if steamid in curlives:
-                    non_death_end_life(cursor, steamid, curteams[steamid], timestamp, 'changerole',
-                                       curlives, curfight)
-                curlives[steamid] = (nextlife, newrole, timestamp)
-                nextlife += 1
+                    end_life(cursor, steamid, curteams[steamid], timestamp,
+                             'changerole', curlives, curround)
+                    pass
+                # Put them into curlives even if they're not in it
+                # now, for a player's first class selection.
+                curlives[steamid] = (nextlife.next(), newrole, timestamp)
             if result.changeteam:
                 steamid = result.changeteam.steamid
-                if result.changeteam.newteam in ['Red', 'Blue']:
+                if steamid in curteams:
+                    del curteams[steamid]
+                if result.changeteam.newteam in ['Red', 'Blue', 'Spectator']:
                     curteams[steamid] = result.changeteam.newteam
-            if result.roundstart or result.gameover:
-                for steamid in curlives:
-                    non_death_end_life(cursor, steamid, curteams[steamid], timestamp, 'roundend',
-                                       curlives, curfight)
-                    curlife, curclass, begin = curlives[steamid]
-                    curlives[steamid] = (nextlife, curclass, timestamp)
-                    nextlife += 1
             if result.leave:
                     quitter = actor.parseString(result.leave.quitter)
                     try:
-                        non_death_end_life(cursor, quitter.steamid, quitter.team, timestamp, 'leaveserver',
-                                           curlives, curfight)
+                        end_life(cursor, quitter.steamid, quitter.team, timestamp,
+                                 'leaveserver', curlives, curround)
                     except KeyError, sqlite3.IntegrityError:
                         pass
                     finally:
@@ -310,8 +300,6 @@ def processLogFile(filename, dbconn, pugid):
 
                     if quitter.steamid in curteams:
                         del curteams[quitter.steamid]
-
-            # END OF LIFE TRACKING
 
             # Handle new players and name changes
             if result.enter or result.changename:
@@ -338,13 +326,34 @@ def processLogFile(filename, dbconn, pugid):
             #print line
             raise
 
-def non_death_end_life(cursor, steamid, team, end, reason, curlives, curfight):
+def end_life(cursor, steamid, team, end, reason, curlives, curround):
     life, curclass, begin = curlives[steamid]
     if life is not None and begin != end:
-        cursor.execute('insert or ignore into lives values (?, ?, ?, ?, ?, ?, ?, ?)',
-                       (life, steamid, team.title(), curclass, begin, end, reason, None))
-        cursor.execute('insert or ignore into fightlives values (?, ?)',
-                       (curfight.id, life))
+        cursor.execute('insert or ignore into lives values (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                       (life, steamid, team.title(), curclass, begin, end,
+                        reason, None, curround.id))
+
+def record_roundlives(cursor, curlives, curround):
+    cursor.executemany('insert or ignore into roundlives values (?, ?)',
+                       [(curround.id, life)
+                        for (life, curclass, begin) in curlives.values()])
+
+def end_fight(cursor, curlives, curfight, curround, timestamp, cappingteam, humiliation):
+    assert curfight.point is not None
+    cursor.execute('insert into fights values (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                   (curfight.id, curround.id, curround.map,
+                    curfight.midowner, curfight.point,
+                    cappingteam,
+                    curfight.begin, timestamp, humiliation))
+    curfight.id += 1
+    curfight.begin = timestamp
+
+def end_round(cursor, curlives, curround, timestamp, cappingteam,
+              endreason, pugid):
+    cursor.execute('insert into rounds values (?, ?, ?, ?, ?, ?, ?, ?)',
+                   (curround.id, curround.map, curround.type,
+                    cappingteam, curround.begin, timestamp,
+                    endreason, pugid))
 
 def deb(o):
     print str(type(o)) + ": " + repr(o)
@@ -374,7 +383,7 @@ def main(dbfilename, logs):
         sys.stdout.write('Processing ' + filename)
         sys.stdout.flush()
         try:
-            processLogFile(filename, dbconn, pugid)
+            processLogFile(filename, cursor, pugid)
         except BadPugException, e:
             print
             print '\t Bad pug!'
@@ -387,15 +396,17 @@ def main(dbfilename, logs):
             successfulpugs += 1
             pugid += 1
         finally:
-            sys.stdout.write('\r')
+            sys.stdout.write('\r' + (' ' * 70) + '\r')
     sys.stdout.write('\nCleaning up... ')
-    # Clean out lives of 0 seconds.
-    cursor.execute('delete from lives where begin = end')
+    # Clean out lives 0 seconds or negative time.
+    cursor.execute('delete from lives where begin >= end')
     # Clean up wrong viclife entry on assists, dominations, and
     # revenges.
     cursor.execute("""update events set viclife = (select viclife from events e2 where e2.id = events.parent)
     where type in ('kill assist','domination','revenge')""")
+    cursor.execute("analyze")
     dbconn.commit()
+    cursor.close()
     dbconn.close()
     sys.stdout.write('done.\n')
     if badpugs > 0:
