@@ -134,22 +134,24 @@ def processLogFile(filename, cursor, pugid):
                           timestamp, None, humiliation=False)
 
             if result.pointcaptured:
-                # Record that current fight is over and that the
-                # capping team won.
                 assert curfight.point is not None
-                end_fight(cursor, curlives, curfight, curround, timestamp,
-                          result.pointcaptured.team, humiliation=False)
 
                 # Record the capturers
                 for p in result.pointcaptured.keys():
                     if p.startswith('player'):
                         player = actor.parseString(result.pointcaptured[p])
                         # pointcaptured has event type id 9
-                        cursor.execute("insert into events values (NULL, 9, ?, ?, ?, NULL, NULL, NULL, ?, NULL, NULL)",
+                        cursor.execute("insert into events values (NULL, 9, ?, ?, ?, NULL, NULL, NULL, ?, ?, NULL, NULL)",
                                        (timestamp, player.steamid,
-                                        curlives[player.steamid][0], curround.id))
+                                        curlives[player.steamid][0],
+                                        curfight.id, curround.id))
                         cursor.execute("insert into cappers values (?, ?)",
                                        (player.steamid, curfight.id))
+
+                # Record that current fight is over and that the
+                # capping team won.
+                end_fight(cursor, curlives, curfight, curround, timestamp,
+                          result.pointcaptured.team, humiliation=False)
 
                 # We now want to set the curfight.point to the point
                 # that the midowner will be attacking.  The 'cp' field
@@ -246,11 +248,12 @@ def processLogFile(filename, cursor, pugid):
                 viclife, curclass, begin = curlives.get(vicplayer, (None,None,None))
                 if srclife is not None:
                     #eventtype = event_types.get(eventtype)
-                    cursor.execute("insert into events values (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    cursor.execute("insert into events values (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                                    (event_types.get(eventtype), timestamp,
                                     srcplayer, srclife,
                                     vicplayer, viclife,
-                                    weapon, curround.id, parent, obj))
+                                    weapon, curfight.id, curround.id,
+                                    parent, obj))
                 # Set this event as the most recent kill/kill assist/killedobj
                 if result.kill or result.suicide:
                     lastkill = cursor.lastrowid
