@@ -383,7 +383,7 @@ def main(dbfilename, logs):
     successfulpugs = 0
 
     for filename in logs:
-        sys.stdout.write('Processing ' + filename)
+        sys.stdout.write('Processing ' + os.path.basename(filename))
         sys.stdout.flush()
         try:
             processLogFile(filename, cursor, pugid)
