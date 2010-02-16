@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from pprint import pprint
 from pyparsing import ParseException
 import logging
@@ -7,6 +7,8 @@ import sys
 import os
 import mapguesser
 import itertools
+import respawnwaves
+import attributedrow
 
 from logparser import *
 
@@ -15,15 +17,15 @@ errorsfilename = '/tmp/errors-'
 file(unparsedfilename, 'w').close() # Blank the file
 
 class Round(object):
-    __slots__ = ['id', 'map', 'type', 'begin']
-    def __init__(self, *args):
-        for s,v in zip(Round.__slots__, args):
-            setattr(self, s, v)
+    __slots__ = ['id', 'map', 'type', 'begin', 'wavecalculator']
+    def __init__(self):
+        for slot in Round.__slots__:
+            setattr(self, slot, None)
 class Fight(object):
     __slots__ = ['id', 'round', 'midowner', 'point', 'begin']
     def __init__(self, *args):
-        for s,v in zip(Fight.__slots__, args):
-            setattr(self, s, v)
+        for slot in Fight.__slots__:
+            setattr(self, slot, None)
 
 class BadPugException(Exception): pass
 class NotAPugException(Exception): pass
@@ -39,11 +41,13 @@ def processLogFile(filename, cursor, pugid):
     errors = file(errorsfilename + os.path.basename(filename), 'a')
     errorcount = 0
 
-    curround = Round(None, None, None, None)
-    curfight = Fight(None, None, None, 3, None)
+    curround = Round()
+    curfight = Fight()
+    curfight.point = 3
     lastkill = None
     lastkilledobject = None
     lastkillassist = None
+    unspawnedDeaths = set()
 
     # Support resuming by fetching the max ids already in use.
     cursor.execute('select max(id) from rounds')
@@ -82,6 +86,9 @@ def processLogFile(filename, cursor, pugid):
             continue
         timestamp = datetime.strptime(result.timestamp, '%m/%d/%Y - %H:%M:%S:')
         try:
+            updateRespawnTimes(cursor, curlives, curround,
+                               timestamp, unspawnedDeaths)
+
             if result.newlogfile:
                 curround.begin = timestamp
                 curround.type = 'pregame'
@@ -93,8 +100,10 @@ def processLogFile(filename, cursor, pugid):
                 for steamid in curlives:
                     end_life(cursor, steamid, curteams[steamid], timestamp,
                              'roundend', curlives, curround)
-                    curlife, curclass, begin = curlives[steamid]
-                    curlives[steamid] = (nextlife.next(), curclass, timestamp)
+                    curlife, curclass, begin, spawn = curlives[steamid]
+                    curlives[steamid] = (nextlife.next(), curclass, timestamp, timestamp)
+                # Clear unspawnedDeaths for the new round
+                unspawnedDeaths.clear()
 
                 # End the pregame fight/round or the humiliation fight
                 # of the previous round.
@@ -117,6 +126,7 @@ def processLogFile(filename, cursor, pugid):
                     return
 
                 curround.type = 'normal'
+                curround.wavecalculator = None
                 curfight.midowner = None
                 curfight.point = 3
 
@@ -152,6 +162,15 @@ def processLogFile(filename, cursor, pugid):
                 # capping team won.
                 end_fight(cursor, curlives, curfight, curround, timestamp,
                           result.pointcaptured.team, humiliation=False)
+
+                # Notify the respawn wave calculator of the capture.
+                if curround.wavecalculator is not None:
+                    cursor.execute('''
+                    select midowner, point, winner, end as "end [timestamp]"
+                    from fights where rowid = ?''',
+                                   (cursor.lastrowid,))
+                    fight = cursor.fetchone()
+                    curround.wavecalculator.notifyOfCapture(fight)
 
                 # We now want to set the curfight.point to the point
                 # that the midowner will be attacking.  The 'cp' field
@@ -195,6 +214,7 @@ def processLogFile(filename, cursor, pugid):
                 end_round(cursor, curlives, curround, timestamp,
                           result.roundwin.winner.strip('"') if result.roundwin else None,
                           'capture' if result.roundwin else 'stalemate', pugid)
+                unspawnedDeaths.clear()
 
             if result.event:
                 obj = None
@@ -245,7 +265,7 @@ def processLogFile(filename, cursor, pugid):
                         continue
 
                 srclife = curlives[srcplayer][0]
-                viclife, curclass, begin = curlives.get(vicplayer, (None,None,None))
+                viclife, curclass, begin, spawn = curlives.get(vicplayer, (None,None,None,None))
                 if srclife is not None:
                     #eventtype = event_types.get(eventtype)
                     cursor.execute("insert into events values (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -267,12 +287,20 @@ def processLogFile(filename, cursor, pugid):
                 # Insert the life that was ended by this kill/suicide.
                 if result.kill or result.suicide:
                     end = timestamp
-                    cursor.execute("insert or ignore into lives values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    if curround.type == 'pregame' and begin is not None:
+                        spawn = begin + timedelta(seconds=5)
+                    cursor.execute("insert into lives values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                                    (viclife, vicplayer, curteams[vicplayer], curclass,
-                                    begin, end, eventtype, lastkill, curround.id))
-                    #cursor.execute("insert or ignore into roundlives values (?, ?)",
-                    #               (curround.id, viclife))
-                    curlives[vicplayer] = (nextlife.next(), curclass, timestamp)
+                                    begin, end, eventtype, lastkill, curround.id, spawn))
+                    curlives[vicplayer] = (nextlife.next(), curclass, timestamp, None)
+                    if curround.wavecalculator is None:
+                        curround.wavecalculator = respawnwaves.WaveCalculator(timestamp)
+                    cursor.execute('''select
+                    e.time, l.team, l.player from lives l
+                    join events e on l.deathevent = e.id
+                    where l.rowid = ?''', (cursor.lastrowid,))
+                    death = cursor.fetchone()
+                    unspawnedDeaths.add(death)
 
             if result.changerole:
                 steamid = result.changerole.steamid
@@ -281,9 +309,14 @@ def processLogFile(filename, cursor, pugid):
                     end_life(cursor, steamid, curteams[steamid], timestamp,
                              'changerole', curlives, curround)
                     pass
+                if steamid in curlives and curlives[steamid][3] is None:
+                    spawnTime = None
+                else:
+                    spawnTime = timestamp
                 # Put them into curlives even if they're not in it
                 # now, for a player's first class selection.
-                curlives[steamid] = (nextlife.next(), newrole, timestamp)
+                curlives[steamid] = (nextlife.next(), newrole, timestamp, spawnTime)
+
             if result.changeteam:
                 steamid = result.changeteam.steamid
                 if steamid in curteams:
@@ -291,18 +324,20 @@ def processLogFile(filename, cursor, pugid):
                 if result.changeteam.newteam in ['Red', 'Blue', 'Spectator']:
                     curteams[steamid] = result.changeteam.newteam
             if result.leave:
-                    quitter = actor.parseString(result.leave.quitter)
-                    try:
-                        end_life(cursor, quitter.steamid, quitter.team, timestamp,
-                                 'leaveserver', curlives, curround)
-                    except KeyError, sqlite3.IntegrityError:
-                        pass
-                    finally:
-                        if quitter.steamid in curlives:
-                            del curlives[quitter.steamid]
+                quitter = actor.parseString(result.leave.quitter)
+                try:
+                    end_life(cursor, quitter.steamid, quitter.team, timestamp,
+                             'leaveserver', curlives, curround)
+                except KeyError, sqlite3.IntegrityError:
+                    pass
+                finally:
+                    if quitter.steamid in curlives:
+                        del curlives[quitter.steamid]
+                    unspawnedDeaths = set(death for death in unspawnedDeaths
+                                          if death.player != quitter.steamid)
 
-                    if quitter.steamid in curteams:
-                        del curteams[quitter.steamid]
+                if quitter.steamid in curteams:
+                    del curteams[quitter.steamid]
 
             # Handle new players and name changes
             if result.enter or result.changename:
@@ -325,21 +360,16 @@ def processLogFile(filename, cursor, pugid):
         except Exception, e:
             print >> errors, e
             print >> errors, line
-            #print e
-            #print line
+            print e
+            print line
             raise
 
 def end_life(cursor, steamid, team, end, reason, curlives, curround):
-    life, curclass, begin = curlives[steamid]
+    life, curclass, begin, spawn = curlives[steamid]
     if life is not None and begin != end:
-        cursor.execute('insert or ignore into lives values (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        cursor.execute('insert into lives values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                        (life, steamid, team.title(), curclass, begin, end,
-                        reason, None, curround.id))
-
-def record_roundlives(cursor, curlives, curround):
-    cursor.executemany('insert or ignore into roundlives values (?, ?)',
-                       [(curround.id, life)
-                        for (life, curclass, begin) in curlives.values()])
+                        reason, None, curround.id, spawn))
 
 def end_fight(cursor, curlives, curfight, curround, timestamp, cappingteam, humiliation):
     assert curfight.point is not None
@@ -358,11 +388,24 @@ def end_round(cursor, curlives, curround, timestamp, cappingteam,
                     cappingteam, curround.begin, timestamp,
                     endreason, pugid))
 
+def updateRespawnTimes(cursor, curlives, curround, timestamp, unspawnedDeaths):
+    wc = curround.wavecalculator
+    spawns = set()
+    #print set((timestamp - death.time).seconds for death in unspawnedDeaths)
+    for death in unspawnedDeaths:
+        spawnTime = wc.timeOfWave(death.team, wc.respawnWave(death))
+        if spawnTime <= timestamp:
+            curlife, curclass, begin, _ = curlives[death.player]
+            curlives[death.player] = (curlife, curclass, begin, spawnTime)
+            spawns.add(death)
+    unspawnedDeaths -= spawns
+
 def deb(o):
     print str(type(o)) + ": " + repr(o)
 
 def main(dbfilename, logs):
-    dbconn = sqlite3.connect(dbfilename)
+    dbconn = sqlite3.connect(dbfilename,
+                             detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
     cursor = dbconn.cursor()
 
     cursor.execute('select event_name, id from event_types')
@@ -378,6 +421,10 @@ def main(dbfilename, logs):
         pugid = cursor.fetchone()[0] + 1
     except TypeError:
         pugid = 1
+
+    cursor.close()
+    dbconn.row_factory = attributedrow.AttributedRow
+    cursor = dbconn.cursor()
 
     badpugs = 0
     successfulpugs = 0
