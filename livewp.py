@@ -33,15 +33,16 @@ def livingPlayers(team, time, round):
     #print count, offclasses
     for i in range(len(count)):
         utilitiesAssigned = min(offclasses, limits[i] - count[i])
-        count[0] += utilitiesAssigned
+        count[i] += utilitiesAssigned
         offclasses -= utilitiesAssigned
 
     return tuple(count)
 
 def hasUber(team, time, round):
     """
-    A fifth entry is 1 if the medic has been alive for 45 seconds (and
-    should have uber).
+    Return 1 if the the medic for the given team should have uber.
+    'Should have uber' is defined as alive for 45 seconds or more
+    since his most recent pop or spawn.  Return 0 on no uber.
     """
 
     cursor.execute('''select spawn as "spawn [timestamp]" from lives
