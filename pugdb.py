@@ -364,13 +364,8 @@ def processLogFile(filename, cursor, pugid):
                 elif result.changename:
                     steamid = result.changename.steamid
                     name = eval(result.changename.newplayer)
-                cursor.execute('select count(name) from players where steamid = ?', (steamid,))
-                if cursor.fetchone()[0] == 0:
-                    cursor.execute('insert into players values (?, ?)',
-                                   (steamid, name))
-                else:
-                    cursor.execute('update players set name = ? where steamid = ?',
-                                   (name, steamid))
+                cursor.execute('insert or replace into players values (?, ?)',
+                               (steamid, name))
         except KeyError, ke:
             raise BadPugException(ke)
         except Exception, e:
