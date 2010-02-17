@@ -207,12 +207,21 @@ def processLogFile(filename, cursor, pugid):
 
             if result.roundwin or result.roundstalemate:
                 assert curround.type == 'normal'
-                if result.roundstalemate:
+
+                # Check if there was a capture right before this.  If
+                # there was no capture, the round is really a
+                # stalemate, but the game gave the round to the team
+                # with more rounds won.
+                cursor.execute('select * from events where type = 9 and time = ?',
+                               (timestamp,))
+                capture = cursor.fetchone()
+
+                if result.roundstalemate or capture is None:
                     end_fight(cursor, curlives, curfight, curround, timestamp, None,
                               humiliation=False)
                 end_round(cursor, curlives, curround, timestamp,
                           result.roundwin.winner.strip('"') if result.roundwin else None,
-                          'capture' if result.roundwin else 'stalemate', pugid)
+                          'capture' if result.roundwin and capture else 'stalemate', pugid)
                 unspawnedDeaths.clear()
 
             if result.event:
