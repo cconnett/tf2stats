@@ -3,17 +3,15 @@ import datetime
 import respawnwaves
 import attributedrow
 
-def livingPlayers(team, time, round, unspawnedDeaths):
+def livingPlayers(team, time, round):
     """Return the number of each role that are alive for the given
     team at the given time.
 
     Returns a 4-tuple: (Scouts/Utilities, Soldiers, Demoman, Medic)
     """
 
-    deadPlayers = set(death.vicplayer for death in unspawnedDeaths)
-    cur.execute(lives_query, (time, time, team, round))
+    cur.execute(lives_query, (time, time, time, team, round))
     lives = cur.fetchall()
-    lives = [life for life in lives if life.player not in deadPlayers]
 
     count = [0,0,0,0]
     limits = [2,2,1,1]
@@ -26,10 +24,6 @@ def livingPlayers(team, time, round, unspawnedDeaths):
         except KeyError:
             offclasses += 1
 
-        if life.role == 'medic' and \
-           (time - life.begin) >= datetime.timedelta(seconds=45):
-            uber = 1
-
     #print count, offclasses
     for i in range(len(count)):
         utilitiesAssigned = min(offclasses, limits[i] - count[i])
@@ -38,7 +32,7 @@ def livingPlayers(team, time, round, unspawnedDeaths):
 
     return tuple(count)
 
-def hasUber(team, time, round, unspawnedDeaths):
+def hasUber(team, time, round):
     """
     A fifth entry is 1 if the medic has been alive for 45 seconds (and
     should have uber).
@@ -57,9 +51,7 @@ def hasUber(team, time, round, unspawnedDeaths):
 
     lastPop = cur.fetchone()
 
-    medicDeath = [death for death in unspawnedDeaths
-                  if death.role == 'medic' and death.team == team]
-    if life is None or medicDeath:
+    if life is None or life.spawn is None:
         return False
     if lastPop is None or lastPop.time is None:
         lastReset = life.spawn
@@ -71,10 +63,12 @@ def hasUber(team, time, round, unspawnedDeaths):
     return False
 
 def position(team, time, round):
-    cur.execute('''select midowner, point from fights
+    cur.execute('''select midowner, point, humiliation from fights
     where ? between begin and end and ? != end and round = ?''',
                 (time, time, round))
     fight = cur.fetchone()
+    if fight.humiliation:
+        return None
     return (fight.midowner, fight.point)
 
 deaths_query = """
@@ -92,6 +86,7 @@ lives_query = """
 select player, team, class as role, begin as "begin [timestamp]" from lives
 where ? between lives.begin and lives.end
 and ? != lives.end
+and ? >= lives.spawn
 and team = ?
 and round = ?
 """
@@ -102,48 +97,25 @@ conn = sqlite3.connect('/var/local/chris/pug.db',
 conn.row_factory = attributedrow.AttributedRow
 cur = conn.cursor()
 
-cur.execute(deaths_query, (round,))
-deaths = cur.fetchall()
+statechange_query = """
+select time as 'time [timestamp]' from events where type in (5,11,3,9) and round = ?
+union
+select spawn from lives where spawn is not null and round = ?
+union
+select datetime(spawn, '45 seconds') from lives where class = 'medic' and round = ?
+and spawn is not null and datetime(spawn, '45 seconds') < end
+union
+select datetime(time, '53 seconds') from events
+where type = 3 and round = ? and datetime(time, '53 seconds') < (select end from rounds where id = ?)
+"""
 
-cur.execute(fights_query, (round, ))
-fights = cur.fetchall()
+cur.execute(statechange_query, (round,round,round,round,round))
+times = [row.time for row in cur.fetchall()]
 
-cur.execute('select end from rounds where id = ?', (round,))
-roundEnd = cur.fetchone().end
-
-wc = respawnwaves.WaveCalculator(deaths[0].time)
-
-unspawnedDeaths = set()
-
-theTime = deaths[0].time
-while theTime < roundEnd:
-    eventOccurred = False
-    while deaths and deaths[0].time <= theTime:
-        unspawnedDeaths.add(deaths[0])
-        print '%s %s died at %s' % (deaths[0].team, deaths[0].role, deaths[0].time)
-        eventOccurred = True
-        del deaths[0]
-    if fights and fights[0].end <= theTime:
-        print '%s captured spire at %s.' % (fights[0].winner, theTime)
-        eventOccurred = True
-        wc.notifyOfCapture(fights[0])
-        del fights[0]
-    spawns = [death for death in unspawnedDeaths
-              if wc.timeOfWave(death.team, wc.respawnWave(death)) <= theTime]
-    for spawn in spawns:
-        print '%s %s that died at %s respawns at %s' % (spawn.team, spawn.role, spawn.time, theTime)
-        eventOccurred = True
-    unspawnedDeaths -= set(spawns)
-    for death in unspawnedDeaths:
-        if eventOccurred:
-            pass
-        #    print '\t%s %s from %s (up at %s)' % (death.team, death.role, death.time,
-        #                                          wc.timeOfWave(death.team, wc.respawnWave(death)))
-    theTime += datetime.timedelta(seconds=1)
-    if eventOccurred:
-        print 'Blue:', livingPlayers('Blue', theTime, round, unspawnedDeaths), \
-              hasUber('Blue', theTime, round, unspawnedDeaths)
-        print 'Red: ', livingPlayers('Red', theTime, round, unspawnedDeaths), \
-              hasUber('Red', theTime, round, unspawnedDeaths)
-        print 'Position:', position(None, theTime, round)
-        print
+for theTime in times:
+    print theTime
+    print 'Blue:', livingPlayers('Blue', theTime, round), \
+          hasUber('Blue', theTime, round)
+    print 'Red: ', livingPlayers('Red', theTime, round), \
+          hasUber('Red', theTime, round)
+    print
