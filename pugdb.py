@@ -292,15 +292,23 @@ def processLogFile(filename, cursor, pugid):
                     cursor.execute("insert into lives values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                                    (viclife, vicplayer, curteams[vicplayer], curclass,
                                     begin, end, eventtype, lastkill, curround.id, spawn))
-                    curlives[vicplayer] = (nextlife.next(), curclass, timestamp, None)
-                    if curround.wavecalculator is None:
-                        curround.wavecalculator = respawnwaves.WaveCalculator(timestamp)
-                    cursor.execute('''select
-                    e.time, l.team, l.player from lives l
-                    join events e on l.deathevent = e.id
-                    where l.rowid = ?''', (cursor.lastrowid,))
-                    death = cursor.fetchone()
-                    unspawnedDeaths.add(death)
+                    if timestamp - curround.begin <= timedelta(seconds=4):
+                        # Killing yourself within the freeze time at
+                        # the start of a round gets you an instant
+                        # respawn.
+                        curlives[vicplayer] = (nextlife.next(), curclass, timestamp, timestamp)
+                    else:
+                        curlives[vicplayer] = (nextlife.next(), curclass, timestamp, None)
+
+                        if curround.wavecalculator is None:
+                            curround.wavecalculator = respawnwaves.WaveCalculator(timestamp)
+
+                        cursor.execute('''select
+                        e.time, l.team, l.player from lives l
+                        join events e on l.deathevent = e.id
+                        where l.rowid = ?''', (cursor.lastrowid,))
+                        death = cursor.fetchone()
+                        unspawnedDeaths.add(death)
 
             if result.changerole:
                 steamid = result.changerole.steamid
