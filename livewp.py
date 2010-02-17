@@ -59,24 +59,28 @@ def hasUber(team, time, round):
     lastPop = cursor.fetchone()
 
     if life is None or life.spawn is None:
-        return False
+        return 0
     if lastPop is None or lastPop.time is None:
         lastReset = life.spawn
+    elif (time - lastPop.time) <= datetime.timedelta(seconds=8):
+        # If they're currently ubering, they obviously beat the 45
+        # second estimate.  Make sure to count current ubers.
+        return 1
     else:
         lastReset = max(life.spawn,
                         lastPop.time + datetime.timedelta(seconds=8))
     if (time - lastReset) >= datetime.timedelta(seconds=45):
-        return True
-    return False
+        return 1
+    return 0
 
-def position(team, time, round):
-    cursor.execute('''select midowner, point, humiliation, map from fights
+def currentFight(team, time, round):
+    cursor.execute('''select midowner, point, humiliation, map, winner from fights
     where ? between begin and end and ? != end and round = ?''',
                 (time, time, round))
     fight = cursor.fetchone()
     if fight is None or fight.humiliation:
         return None
-    return (map, fight.midowner, fight.point)
+    return fight
 
 def wpStates(round):
     cursor.execute("""
@@ -87,21 +91,27 @@ def wpStates(round):
     select datetime(spawn, '45 seconds') from lives where class = 'medic' and round = ?
     and spawn is not null and datetime(spawn, '45 seconds') < end
     union
+    select datetime(time, '8 seconds') from events
+    where type = 3 and round = ? and datetime(time, '53 seconds') < (select end from rounds where id = ?)
+    union
     select datetime(time, '53 seconds') from events
     where type = 3 and round = ? and datetime(time, '53 seconds') < (select end from rounds where id = ?)
-    """, (round,round,round,round,round))
+    """, (round,) * 7)
     times = [row.time for row in cursor.fetchall()]
+
     lastState = None
 
     for time in times:
-        pos = position(None, time, round)
-        if pos is None:
+        fight = currentFight(None, time, round)
+        if fight is None:
             break
-        map, midowner, point = pos
-        defender = {'Blue': 'Red', 'Red': 'Blue', None: None}[midowner]
-        state = ((map, midowner, point),
-                 livingPlayers(midowner or 'Blue', time, round), hasUber(midowner or 'Blue', time, round),
-                 livingPlayers(defender or 'Red', time, round), hasUber(defender or 'Red', time, round))
+        defender = {'Blue': 'Red', 'Red': 'Blue', None: None}[fight.midowner]
+        state = (str(fight.map), str(fight.midowner), fight.point) + \
+                livingPlayers(fight.midowner or 'Blue', time, round) + \
+                (hasUber(fight.midowner or 'Blue', time, round),) + \
+                livingPlayers(defender or 'Red', time, round) + \
+                (hasUber(defender or 'Red', time, round),) + \
+                (str(fight.winner),)
 
         if state != lastState:
             yield state
@@ -113,15 +123,30 @@ if __name__ == '__main__':
     conn.row_factory = attributedrow.AttributedRow
     cursor = conn.cursor()
 
+    statsfile = '/tmp/stats.db'
+    file(statsfile, 'w').close()
+    statsdb = sqlite3.connect(statsfile)
+
+    sc = statsdb.cursor()
+    sc.execute('''create table stats
+    (map text, midowner text, point integer,
+    o1 integer, o2 integer,
+    o4 integer, o7 integer,
+    oc boolean,
+    d1 integer, d2 integer,
+    d4 integer, d7 integer,
+    dc boolean,
+    fight_winner text, round_winner text)
+    ''')
     cursor.execute("select distinct id from rounds where type = 'normal'")
     rounds = [row.id for row in cursor.fetchall()]
 
-    stateRoundWP = collections.defaultdict(list)
-    fightStates = []
-
+    insert = 'insert into stats values (' + ','.join(['?'] * 15) + ')'
     for r in rounds:
+        print r
         cursor.execute('select winner from rounds where id = ?', (r,))
         winner = cursor.fetchone().winner
         for state in wpStates(r):
-            stateRoundWP[state].append(winner)
+            sc.execute(insert, state + (winner,))
         print 'Winner:', winner
+        statsdb.commit()
