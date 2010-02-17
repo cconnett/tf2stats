@@ -203,7 +203,6 @@ def processLogFile(filename, cursor, pugid):
                     # will be a roundwin event and a roundstart for
                     # next round.
                     pass
-                curfight.id += 1
                 curfight.begin = timestamp
 
             if result.roundwin or result.roundstalemate:
