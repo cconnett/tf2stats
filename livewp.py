@@ -106,12 +106,13 @@ def wpStates(round):
         if fight is None:
             break
         defender = {'Blue': 'Red', 'Red': 'Blue', None: None}[fight.midowner]
-        state = (str(fight.map), str(fight.midowner), fight.point) + \
+
+        state = (fight.map, fight.midowner, fight.point) + \
                 livingPlayers(fight.midowner or 'Blue', time, round) + \
                 (hasUber(fight.midowner or 'Blue', time, round),) + \
                 livingPlayers(defender or 'Red', time, round) + \
                 (hasUber(defender or 'Red', time, round),) + \
-                (str(fight.winner),)
+                (fight.winner,)
 
         if state != lastState:
             yield state
@@ -123,12 +124,11 @@ if __name__ == '__main__':
     conn.row_factory = attributedrow.AttributedRow
     cursor = conn.cursor()
 
-    statsfile = '/tmp/stats.db'
-    file(statsfile, 'w').close()
+    statsfile = '/var/local/chris/wp.db'
     statsdb = sqlite3.connect(statsfile)
 
     sc = statsdb.cursor()
-    sc.execute('''create table stats
+    sc.execute('''create table if not exists stats
     (map text, midowner text, point integer,
     o1 integer, o2 integer,
     o4 integer, o7 integer,
@@ -138,6 +138,7 @@ if __name__ == '__main__':
     dc boolean,
     fight_winner text, round_winner text)
     ''')
+    sc.execute('delete from stats')
     cursor.execute("select distinct id from rounds where type = 'normal'")
     rounds = [row.id for row in cursor.fetchall()]
 
@@ -149,4 +150,4 @@ if __name__ == '__main__':
         for state in wpStates(r):
             sc.execute(insert, state + (winner,))
         print 'Winner:', winner
-        statsdb.commit()
+    statsdb.commit()
