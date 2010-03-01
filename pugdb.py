@@ -47,6 +47,8 @@ def processLogFile(filename, cursor, pugid):
     lastkill = None
     lastkilledobject = None
     lastkillassist = None
+    lasthealing = None
+    lastuberchargestatus = None
     unspawnedDeaths = set()
 
     # Support resuming by fetching the max ids already in use.
@@ -255,6 +257,9 @@ def processLogFile(filename, cursor, pugid):
                     if eventtype in ['killedobject'] and event.assist:
                         eventtype = 'killedobject assist'
                         parent = lastkilledobject
+                    if eventtype == 'medic_death':
+                        lasthealing = int(event.healing.strip('"'))
+                        lastuberchargestatus = bool(int(event.ubercharge.strip('"')))
 
                     if eventtype in ['killedobject', 'killedobject assist']:
                         vicplayer = actor.parseString(event.objectowner).steamid
@@ -297,9 +302,12 @@ def processLogFile(filename, cursor, pugid):
                     end = timestamp
                     if curround.type == 'pregame' and begin is not None:
                         spawn = begin + timedelta(seconds=5)
-                    cursor.execute("insert into lives values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    cursor.execute("insert into lives values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                                    (viclife, vicplayer, curteams[vicplayer], curclass,
-                                    begin, end, eventtype, lastkill, curround.id, spawn))
+                                    begin, end, eventtype, lastkill, curround.id, spawn,
+                                    lasthealing, lastuberchargestatus))
+                    lasthealing = None
+                    lastuberchargestatus = None
                     if timestamp - curround.begin <= timedelta(seconds=4):
                         # Killing yourself within the freeze time at
                         # the start of a round gets you an instant
@@ -378,9 +386,9 @@ def processLogFile(filename, cursor, pugid):
 def end_life(cursor, steamid, team, end, reason, curlives, curround):
     life, curclass, begin, spawn = curlives[steamid]
     if life is not None and begin != end:
-        cursor.execute('insert into lives values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        cursor.execute('insert into lives values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                        (life, steamid, team.title(), curclass, begin, end,
-                        reason, None, curround.id, spawn))
+                        reason, None, curround.id, spawn, None, None))
 
 def end_fight(cursor, curlives, curfight, curround, timestamp, cappingteam, humiliation):
     assert curfight.point is not None
