@@ -1,13 +1,10 @@
-drop table if exists pp;
-create temporary table if not exists pp as select * from pugplayersX;
+create temporary table if not exists pp as select * from pugplayers;
 create index p4 on pp (pug, player);
 create index p3 on pp (player);
 
-drop table if exists p;
 create temporary table if not exists p as select * from pugs;
 create index p1 on p (id);
 
-drop table if exists _summary;
 create temporary table _summary as
 select r.pug pug, pp.team team, e.srcplayer player,
 pp.class class, e.type type, vicpp.class vicclass,
@@ -25,7 +22,6 @@ order by r.pug, pp.team, e.srcplayer, e.type, vicpp.class
 create index _idx_ppctv on _summary (pug, player, class, type, vicclass);
 create index _idx_pctv on _summary (player, class, type, vicclass);
 
-drop table if exists _deaths;
 create temporary table _deaths as
 select r.pug pug, pp.team team, e.vicplayer player,
 pp.class class, srcpp.class srcclass,
@@ -56,20 +52,20 @@ select pug, team, player,
 pp.class = 'scout' isscout,
 (select coalesce(sum(m), 0) from _summary k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.type = 5 and k.vicclass = 'scout') m1,
 (select coalesce(sum(n), 0) from _summary k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.type = 5) k1,
-(select coalesce(sum(n), 0) from _summary k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.type = 5 and k.vicclass = 'scout') k11pm,
-(select coalesce(sum(n), 0) from _summary k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.type = 5 and k.vicclass = 'soldier') k12pm,
-(select coalesce(sum(n), 0) from _summary k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.type = 5 and k.vicclass = 'demoman') k14pm,
-(select coalesce(sum(n), 0) from _summary k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.type = 5 and k.vicclass = 'medic') k17pm,
+(select coalesce(sum(n), 0) from _summary k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.type = 5 and k.vicclass = 'scout') k11,
+(select coalesce(sum(n), 0) from _summary k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.type = 5 and k.vicclass = 'soldier') k12,
+(select coalesce(sum(n), 0) from _summary k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.type = 5 and k.vicclass = 'demoman') k14,
+(select coalesce(sum(n), 0) from _summary k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.type = 5 and k.vicclass = 'medic') k17,
 (select coalesce(sum(n), 0) from _summary k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.type = 6) a1,
-(select coalesce(sum(n), 0) from _summary k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.type = 6 and k.vicclass = 'scout') a11pm,
-(select coalesce(sum(n), 0) from _summary k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.type = 6 and k.vicclass = 'soldier') a12pm,
-(select coalesce(sum(n), 0) from _summary k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.type = 6 and k.vicclass = 'demoman') a14pm,
-(select coalesce(sum(n), 0) from _summary k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.type = 6 and k.vicclass = 'medic') a17pm,
+(select coalesce(sum(n), 0) from _summary k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.type = 6 and k.vicclass = 'scout') a11,
+(select coalesce(sum(n), 0) from _summary k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.type = 6 and k.vicclass = 'soldier') a12,
+(select coalesce(sum(n), 0) from _summary k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.type = 6 and k.vicclass = 'demoman') a14,
+(select coalesce(sum(n), 0) from _summary k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.type = 6 and k.vicclass = 'medic') a17,
 (select coalesce(sum(n), 0) from _deaths k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout') d1,
-(select coalesce(sum(n), 0) from _deaths k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.srcclass = 'scout') d11pm,
-(select coalesce(sum(n), 0) from _deaths k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.srcclass = 'soldier') d12pm,
-(select coalesce(sum(n), 0) from _deaths k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.srcclass = 'demoman') d14pm,
-(select coalesce(sum(n), 0) from _deaths k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.srcclass = 'medic') d17pm,
+(select coalesce(sum(n), 0) from _deaths k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.srcclass = 'scout') d11,
+(select coalesce(sum(n), 0) from _deaths k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.srcclass = 'soldier') d12,
+(select coalesce(sum(n), 0) from _deaths k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.srcclass = 'demoman') d14,
+(select coalesce(sum(n), 0) from _deaths k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.srcclass = 'medic') d17,
 
 pp.class = 'soldier' issoldier,
 (select coalesce(sum(m), 0) from _summary k where k.pug != pp.pug and k.player = pp.player and k.class = 'soldier' and k.type = 5 and k.vicclass = 'scout') m2,
