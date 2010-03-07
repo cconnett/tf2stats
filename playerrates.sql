@@ -16,12 +16,14 @@ from events e join rounds r on e.round = r.id
 join pp on r.pug = pp.pug and e.srcplayer = pp.player
 join p on pp.pug = p.id
 left outer join pp vicpp on r.pug = vicpp.pug and e.vicplayer = vicpp.player
-where r.type = 'normal' and e.type = 5
+where r.type = 'normal' and e.type in (5, 6, 9)
 group by r.pug, e.srcplayer, pp.class, e.type, vicpp.class
 order by r.pug, pp.team, e.srcplayer, e.type, vicpp.class
 ;
-create index _idx_ppctv on _summary (pug, player, class, type, vicclass);
-create index _idx_pctv on _summary (player, class, type, vicclass);
+create index _summary_pptcv on _summary (pug, player, type, class, vicclass);
+create index _summary_ptcv on _summary (player, type, class, vicclass);
+create index _summary_tcpp on _summary (type, class, pug, player);
+create index _summary_tcpt on _summary (type, class, pug, team);
 
 create temporary table _deaths as
 select r.pug pug, pp.team team, e.vicplayer player,
@@ -37,8 +39,8 @@ where r.type = 'normal' and e.type = 5
 group by r.pug, e.vicplayer, pp.class, srcpp.class
 order by r.pug, pp.team, e.srcplayer, srcpp.class
 ;
-create index _idx_ppcts on _deaths (pug, player, class, srcclass);
-create index _idx_pcts on _deaths (player, class, srcclass);
+create index _deaths_ppcts on _deaths (pug, player, class, srcclass);
+create index _deaths_pcts on _deaths (player, class, srcclass);
 
 --Range factor setup
 --Overall stats for all matches
@@ -52,32 +54,32 @@ create temporary table _classtime_factor as
 select class, (select max(cast(classtime as float)) from _classtime) / classtime cf
 from _classtime;
 
-create temporary table _kills as
-select pp.class class, count(*) n
-from events e join rounds r on e.round = r.id join pp on e.srcplayer = pp.player and r.pug = pp.pug
-where e.type = 5 and pp.class != 'medic' and r.type = 'normal'
-group by pp.class;
+create temporary table _rfk as
+select class class, sum(n) n
+from _summary
+where type = 5 and class != 'medic'
+group by class;
 
-create temporary table _assists as
-select pp.class class, count(*) n
-from events e join rounds r on e.round = r.id join pp on e.srcplayer = pp.player and r.pug = pp.pug
-where e.type = 6 and pp.class != 'medic' and r.type = 'normal'
-group by pp.class;
+create temporary table _rfa as
+select class, sum(n) n
+from _summary
+where type = 6 and class != 'medic'
+group by class;
 
-create temporary table _captures as
-select pp.class class, count(*) n
-from events e join rounds r on e.round = r.id join pp on e.srcplayer = pp.player and r.pug = pp.pug
-where e.type = 9 and pp.class != 'medic' and r.type = 'normal'
-group by pp.class;
+create temporary table _rfc as
+select class, sum(n) n
+from _summary
+where type = 9 and class != 'medic'
+group by class;
 
-create temporary table _p as
+create temporary table _rfp as
 select k.class, k.n + 0.5 * a.n + 2.0 * c.n p
-from _kills k join _assists a on k.class = a.class
-              join _captures c on k.class = c.class;
+from _rfk k join _rfa a on k.class = a.class
+            join _rfc c on k.class = c.class;
 
 create temporary table _rfbase as
 select _cf.class class, p * cf rfbase
-from _classtime_factor _cf join _p on _cf.class = _p.class;
+from _classtime_factor _cf join _rfp on _cf.class = _rfp.class;
 
 create temporary table _rfpct as
 select pp.pug pug, pp.team team, pp.class class, rfbase,
@@ -92,24 +94,24 @@ create index rfpct_ptc on _rfpct (pug, team, class);
 
 --Individual player stats (by pug and player)
 create temporary table _playerk as
-select pp.pug pug, pp.player player, pp.class class, count(*) n
-from events e join rounds r on e.round = r.id join pp on e.srcplayer = pp.player and r.pug = pp.pug
-where e.type = 5 and pp.class != 'medic' and r.type = 'normal'
-group by pp.pug, pp.player;
+select pug, player, class, sum(n) n
+from _summary
+where type = 5 and class != 'medic'
+group by pug, player;
 create index pkpp on _playerk (pug, player);
 
 create temporary table _playera as
-select pp.pug pug, pp.player player, pp.class class, count(*) n
-from events e join rounds r on e.round = r.id join pp on e.srcplayer = pp.player and r.pug = pp.pug
-where e.type = 6 and pp.class != 'medic' and r.type = 'normal'
-group by pp.pug, pp.player;
+select pug, player, class, sum(n) n
+from _summary
+where type = 6 and class != 'medic'
+group by pug, player;
 create index papp on _playera (pug, player);
 
 create temporary table _playerc as
-select pp.pug pug, pp.player player, pp.class class, count(*) n
-from events e join rounds r on e.round = r.id join pp on e.srcplayer = pp.player and r.pug = pp.pug
-where e.type = 9 and pp.class != 'medic' and r.type = 'normal'
-group by pp.pug, pp.player;
+select pug, player, class, sum(n) n
+from _summary
+where type = 9 and class != 'medic'
+group by pug, player;
 create index pcpp on _playerc (pug, player);
 
 create temporary table _playerp as
@@ -121,7 +123,8 @@ select k.pug pug, pp.team team, k.player player, k.class class,
        max((select strftime('%s', pugs.end) - strftime('%s', pugs.begin)
               from p pugs where pugs.id = k.pug)
            / cast(totaltime as float), 1) adjustment
-from _playerk k join _playera a on k.pug = a.pug and k.player = a.player join pp on pp.pug = k.pug and pp.player = k.player
+from _playerk k join pp on pp.pug = k.pug and pp.player = k.player
+                join _playera a on k.pug = a.pug and k.player = a.player
                 join _playerc c on k.pug = c.pug and k.player = c.player
 where pp.player in (select thisPP.player from pp thisPP where thisPP.pug = pp.pug
                       group by thisPP.pug, thisPP.player
@@ -133,27 +136,24 @@ where pp.player in (select thisPP.player from pp thisPP where thisPP.pug = pp.pu
 
 --Team frag counts (by pug and team)
 create temporary table _teamk as
-select r.pug pug, l.team team, count(*) n
-from events e join rounds r on e.round = r.id join lives l on e.srclife = l.id
-              join pp on r.pug = pp.pug and l.player = pp.player
-where e.type = 5 and pp.class != 'medic' and r.type = 'normal'
-group by r.pug, l.team;
+select pug, team, sum(n) n
+from _summary
+where type = 5 and class != 'medic'
+group by pug, team;
 create index tkpt on _teamk (pug, team);
 
 create temporary table _teama as
-select pp.pug pug, pp.team team, count(*) n
-from events e join rounds r on e.round = r.id join lives l on e.srclife = l.id
-              join pp on r.pug = pp.pug and l.player = pp.player
-where e.type = 6 and pp.class != 'medic' and r.type = 'normal'
-group by pp.pug, pp.team;
+select pug, team, sum(n) n
+from _summary
+where type = 6 and class != 'medic'
+group by pug, team;
 create index tapt on _teama (pug, team);
 
 create temporary table _teamc as
-select pp.pug pug, pp.team team, count(*) n
-from events e join rounds r on e.round = r.id join lives l on e.srclife = l.id
-              join pp on r.pug = pp.pug and l.player = pp.player
-where e.type = 9 and pp.class != 'medic' and r.type = 'normal'
-group by pp.pug, pp.team;
+select pug, team, sum(n) n
+from _summary
+where type = 9 and class != 'medic'
+group by pug, team;
 create index tcpt on _teamc (pug, team);
 
 create temporary table _teamp as
