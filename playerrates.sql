@@ -64,9 +64,16 @@ from events e join rounds r on e.round = r.id join pp on e.srcplayer = pp.player
 where e.type = 6 and pp.class != 'medic' and r.type = 'normal'
 group by pp.class;
 
+create temporary table _captures as
+select pp.class class, count(*) n
+from events e join rounds r on e.round = r.id join pp on e.srcplayer = pp.player and r.pug = pp.pug
+where e.type = 9 and pp.class != 'medic' and r.type = 'normal'
+group by pp.class;
+
 create temporary table _p as
-select k.class, k.n + 0.5 * a.n p
-from _kills k join _assists a on k.class = a.class;
+select k.class, k.n + 0.5 * a.n + 2.0 * c.n p
+from _kills k join _assists a on k.class = a.class
+              join _captures c on k.class = c.class;
 
 create temporary table _rfbase as
 select _cf.class class, p * cf rfbase
@@ -94,13 +101,20 @@ create index pkpp on _playerk (pug, player);
 create temporary table _playera as
 select pp.pug pug, pp.player player, pp.class class, count(*) n
 from events e join rounds r on e.round = r.id join pp on e.srcplayer = pp.player and r.pug = pp.pug
-where e.type = 5 and pp.class != 'medic' and r.type = 'normal'
+where e.type = 6 and pp.class != 'medic' and r.type = 'normal'
 group by pp.pug, pp.player;
 create index papp on _playera (pug, player);
 
+create temporary table _playerc as
+select pp.pug pug, pp.player player, pp.class class, count(*) n
+from events e join rounds r on e.round = r.id join pp on e.srcplayer = pp.player and r.pug = pp.pug
+where e.type = 9 and pp.class != 'medic' and r.type = 'normal'
+group by pp.pug, pp.player;
+create index pcpp on _playerc (pug, player);
+
 create temporary table _playerp as
 select k.pug pug, pp.team team, k.player player, k.class class,
-       (k.n + 0.5 * a.n)
+       (k.n + 0.5 * a.n + 2.0 * c.n)
        * max((select strftime('%s', pugs.end) - strftime('%s', pugs.begin)
                 from p pugs where pugs.id = k.pug)
              / cast(totaltime as float), 1) p,
@@ -108,6 +122,7 @@ select k.pug pug, pp.team team, k.player player, k.class class,
               from p pugs where pugs.id = k.pug)
            / cast(totaltime as float), 1) adjustment
 from _playerk k join _playera a on k.pug = a.pug and k.player = a.player join pp on pp.pug = k.pug and pp.player = k.player
+                join _playerc c on k.pug = c.pug and k.player = c.player
 where pp.player in (select thisPP.player from pp thisPP where thisPP.pug = pp.pug
                       group by thisPP.pug, thisPP.player
                       order by sum(totaltime) desc
@@ -133,9 +148,18 @@ where e.type = 6 and pp.class != 'medic' and r.type = 'normal'
 group by pp.pug, pp.team;
 create index tapt on _teama (pug, team);
 
+create temporary table _teamc as
+select pp.pug pug, pp.team team, count(*) n
+from events e join rounds r on e.round = r.id join lives l on e.srclife = l.id
+              join pp on r.pug = pp.pug and l.player = pp.player
+where e.type = 9 and pp.class != 'medic' and r.type = 'normal'
+group by pp.pug, pp.team;
+create index tcpt on _teamc (pug, team);
+
 create temporary table _teamp as
-select k.pug pug, k.team team, k.n + 0.5 * a.n p
-from _teamk k join _teama a on k.pug = a.pug and k.team = a.team;
+select k.pug pug, k.team team, k.n + 0.5 * a.n + 2.0 * c.n p
+from _teamk k join _teama a on k.pug = a.pug and k.team = a.team
+              join _teamc c on k.pug = c.pug and k.team = c.team;
 
 --select * from _teamp;
 --End range factor setup.
@@ -156,7 +180,8 @@ from _playerp join _teamp on _playerp.pug = _teamp.pug and _playerp.team = _team
               join _rfpct on _playerp.pug = _rfpct.pug and _playerp.team = _rfpct.team and _playerp.class = _rfpct.class
 join players on _playerp.player = players.steamid
 where _playerp.player = pp.player and _playerp.pug != pp.pug
-group by player) rf,
+group by player)
+rf,
 
 
 pp.class = 'scout' isscout,
