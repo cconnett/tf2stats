@@ -32,7 +32,7 @@ count(*) n, pp.totaltime/60.0 m,
 (strftime('%s', p.end) - strftime('%s', p.begin))/60.0 matchtime
 
 from events e join rounds r on e.round = r.id
-join pp on r.pug = pp.pug and e.srcplayer = pp.player
+join pp on r.pug = pp.pug and e.vicplayer = pp.player
 join p on pp.pug = p.id
 left outer join pp srcpp on r.pug = srcpp.pug and e.srcplayer = srcpp.player
 where r.type = 'normal' and e.type = 5
