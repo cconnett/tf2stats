@@ -113,25 +113,28 @@ from _summary
 where type = 9 and class != 'medic'
 group by pug, player;
 create index pcpp on _playerc (pug, player);
+--select * from pp where pug = 1 order by team;
 
 create temporary table _playerp as
-select k.pug pug, pp.team team, k.player player, k.class class,
-       (k.n + 0.5 * a.n + 2.0 * c.n)
+select pp.pug pug, pp.team team, pp.player player, pp.class class,
+       coalesce((k.n + 0.5 * a.n + 2.0 * c.n), 0)
        * max((select strftime('%s', pugs.end) - strftime('%s', pugs.begin)
                 from p pugs where pugs.id = k.pug)
              / cast(totaltime as float), 1) p,
        max((select strftime('%s', pugs.end) - strftime('%s', pugs.begin)
               from p pugs where pugs.id = k.pug)
            / cast(totaltime as float), 1) adjustment
-from _playerk k join pp on pp.pug = k.pug and pp.player = k.player
-                join _playera a on k.pug = a.pug and k.player = a.player
-                join _playerc c on k.pug = c.pug and k.player = c.player
-where pp.player in (select thisPP.player from pp thisPP where thisPP.pug = pp.pug
-                      group by thisPP.pug, thisPP.player
-                      order by sum(totaltime) desc
-                      limit 12);
+from pp left outer join _playerk k on pp.pug = k.pug and pp.player = k.player
+        left outer join _playera a on pp.pug = a.pug and pp.player = a.player
+        left outer join _playerc c on pp.pug = c.pug and pp.player = c.player
+where pp.player in (select thisPP.player from pp thisPP
+                    where thisPP.pug = pp.pug
+                    group by thisPP.pug, thisPP.player
+                    order by sum(totaltime) desc
+                    limit 12)
+  and pp.class != 'medic';
 
---select * from _playerp where pug = 84;
+--select * from _playerp order by pug, team;--where pug = 84;
 --select player, class from pp
 
 --Team frag counts (by pug and team)
@@ -162,9 +165,34 @@ from _teamk k join _teama a on k.pug = a.pug and k.team = a.team
               join _teamc c on k.pug = c.pug and k.team = c.team;
 
 --select * from _teamp;
+create temporary table _rf_inpug as
+select _playerp.player player, _playerp.pug pug, _playerp.team team,
+       _playerp.p / _teamp.p / rfpct rf
+from _playerp join _teamp on _playerp.pug = _teamp.pug and _playerp.team = _teamp.team
+              join _rfpct on _playerp.pug = _rfpct.pug and _playerp.team = _rfpct.team and _playerp.class = _rfpct.class
+              join players on _playerp.player = players.steamid
+group by player, pug;
+create index _rf_inpug_pp on _rf_inpug (player, pug);
+--select * from _rf_inpug;
+
+create temporary table _rf as
+select player, pug, team,
+       coalesce((select avg(rf) from _rf_inpug innerRF
+                  where innerRF.player = outerRF.player
+                    and innerRF.pug != outerRF.pug), 1.0) rf
+from _rf_inpug outerRF
+group by player, pug;
+create index _rf_pp on _rf (player, pug);
+--select * from _rf;
+
+create temporary table _teamrf as
+select pug, team, sum(coalesce(rf,1.0)) rf
+from _rf
+group by pug, team;
+--select * from _teamrf;
 --End range factor setup.
 
-select pug, team, player,
+select pp.pug, r.id, pp.team, pp.player,
 
 (case when pp.team = 'Blue' then bluescore when pp.team = 'Red' then redscore else null end) p,
 (select sum(winner = pp.team) - sum(winner != pp.team) from rounds where rounds.pug = pp.pug) dp,
@@ -173,16 +201,9 @@ select pug, team, player,
        else (case when redscore > bluescore then redscore + 4 - bluescore else redscore end)
  end) bp,
 
-(select
-avg(_playerp.p / _teamp.p / rfpct) rf
---sum(_playerp.p) / sum(_teamp.p) / rfpct rfWeighted
-from _playerp join _teamp on _playerp.pug = _teamp.pug and _playerp.team = _teamp.team
-              join _rfpct on _playerp.pug = _rfpct.pug and _playerp.team = _rfpct.team and _playerp.class = _rfpct.class
-join players on _playerp.player = players.steamid
-where _playerp.player = pp.player and _playerp.pug != pp.pug
-group by player)
-rf,
-
+--(select rf from _rf where player = pp.player and pug = pp.pug) rf,
+(select rf from _teamrf where team = pp.team and pug = p.id) rf,
+(select rf from _teamrf where team != pp.team and pug = p.id) orf,
 
 pp.class = 'scout' isscout,
 (select coalesce(sum(m), 0) from _summary k where k.pug != pp.pug and k.player = pp.player and k.class = 'scout' and k.type = 5 and k.vicclass = 'scout') m1,
@@ -255,12 +276,16 @@ pp.class = 'medic' ismedic,
 (select coalesce(sum(n), 0) from _deaths k where k.pug != pp.pug and k.player = pp.player and k.class = 'medic' and k.srcclass = 'soldier') d72,
 (select coalesce(sum(n), 0) from _deaths k where k.pug != pp.pug and k.player = pp.player and k.class = 'medic' and k.srcclass = 'demoman') d74,
 (select coalesce(sum(n), 0) from _deaths k where k.pug != pp.pug and k.player = pp.player and k.class = 'medic' and k.srcclass = 'medic') d77,
-NULL
 
+(r.winner = pp.team) win,
+NULL
 from pp join p on pp.pug = p.id
-group by pp.pug, pp.player
+left outer join rounds r on r.pug = pp.pug
+where r.type = 'normal' and pp.class != 'medic'
+group by r.id, pp.team--, pp.player
 having pp.player in (select thisPP.player from pp thisPP where thisPP.pug = pp.pug
                       group by thisPP.pug, thisPP.player
                       order by sum(totaltime) desc
                       limit 12)
-order by pug, team, player;
+--order by pp.pug, pp.team, pp.player;
+order by r.id, pp.team;
