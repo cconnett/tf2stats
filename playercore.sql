@@ -39,4 +39,5 @@ having pp.player in (select thisPP.player from pp thisPP where thisPP.pug = pp.p
                       order by sum(totaltime) desc
                       limit 12)
 order by pp.player, r.id, pp.team;
-create index pv_rp if not exists on playervitals (round, player);
+create index if not exists pv_rp on playervitals (round, player);
+create index if not exists pv_pp on playervitals (pug, player);
