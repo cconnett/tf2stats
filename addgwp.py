@@ -1,30 +1,39 @@
 import csv
-import sys
 import itertools
 import math
-from collections import defaultdict
+import sqlite3
 
 def sigmoid(x):
     return 1.0 / (1.0 + math.exp(-x))
 
-playerstats = csv.reader(file(sys.argv[1]))
-out = csv.writer(file(sys.argv[2], 'w'))
-headers = playerstats.next()
-out.writerow(headers)
+conn = sqlite3.connect('/var/local/chris/pug.db')
+conn.row_factory = sqlite3.Row
+read = conn.cursor()
+write = conn.cursor()
+#cursor.executescript(file('setup.sql').read())
+#cursor.executescript(file('playercore.sql').read())
 
-fields = dict(zip(headers, itertools.count()))
+coeffs = {
+    'kpm': 0.482795,
+    'dpm': -0.509169,
+    }
 
-coeffs = defaultdict(float)
-coeffs['kpm'] = 0.482795
-coeffs['dpm'] = -0.509169
+read.execute('select * from playervitals')
 
-for line in playerstats:
+# Compute GWP
+while True:
+    row = read.fetchone()
+    if row is None:
+        break
+
     logit = 0
-    for field, index in fields.items():
+    for key in coeffs.keys():
         try:
-            logit += coeffs[field] * float(line[index])
-        except ValueError:
+            logit += coeffs[key] * float(row[key])
+        except TypeError:
             pass
-    #print line[fields['kpm']], line[fields['dpm']], logit
-    line[fields['gwp']] = sigmoid(logit)
-    out.writerow(line)
+
+    write.execute('update playervitals set gwp = ? where round = ? and player = ?',
+                  (sigmoid(logit), row['round'], row['player']))
+    print row['round'],row['player']
+conn.commit()
