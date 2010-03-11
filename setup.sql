@@ -173,9 +173,9 @@ create index if not exists _rf_inpug_pp on _rf_inpug (player, pug);
 
 create  table if not exists _rf as
 select player, pug, team,
-       coalesce((select avg(rf) from _rf_inpug innerRF
-                  where innerRF.player = outerRF.player
-                    and innerRF.pug != outerRF.pug), 1.0) rf
+       (select avg(rf) from _rf_inpug innerRF
+         where innerRF.player = outerRF.player
+           and innerRF.pug != outerRF.pug) rf
 from _rf_inpug outerRF
 group by player, pug;
 create index if not exists _rf_pp on _rf (player, pug);

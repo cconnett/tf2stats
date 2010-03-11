@@ -10,26 +10,22 @@ create index _pc_pp on _playercore (player, pug);
 create table if not exists teamGWPs (pug int, team text, gwp float);
 create index if not exists tgwp_pt on teamGWPs (pug, team);
 
---drop table playervitals;
+drop table if exists playervitals;
 create table if not exists playervitals as
 select pp.pug pug, r.id round, pp.team team, pp.player player,
-(case when pp.team = 'Blue' then bluescore when pp.team = 'Red' then redscore else null end) p,
-(select sum(winner = pp.team) - sum(winner != pp.team) from rounds where rounds.pug = pp.pug) dp,
-(case when pp.team = 'Blue'
-       then (case when bluescore > redscore then bluescore + 4 - redscore else bluescore end)
-       else (case when redscore > bluescore then redscore + 4 - bluescore else redscore end)
- end) bp,
 
-(select rf from _rf where player = pp.player and pug = pp.pug) rf,
 NULL gwp,
 NULL teamgwp,
 NULL oppgwp,
-(select rf from _teamrf where team = pp.team and pug = p.id) teamrf,
-(select rf from _teamrf where team != pp.team and pug = p.id) opprf,
 
-(select k/m from _playercore pc where pc.pug = pp.pug and pc.player = pp.player) kpm,
-(select d/m from _playercore pc where pc.pug = pp.pug and pc.player = pp.player) dpm,
-(select a/m from _playercore pc where pc.pug = pp.pug and pc.player = pp.player) apm,
+(select cast(k as float)/m from _playercore pc where pc.pug = pp.pug and pc.player = pp.player) kpm,
+(select cast(d as float)/m from _playercore pc where pc.pug = pp.pug and pc.player = pp.player) dpm,
+(select cast(a as float)/m from _playercore pc where pc.pug = pp.pug and pc.player = pp.player) apm,
+(select cast(k as float)/d from _playercore pc where pc.pug = pp.pug and pc.player = pp.player) kdr,
+
+-- (select rf from _rf where player = pp.player and pug = pp.pug) rf,
+-- (select rf from _teamrf where team = pp.team and pug = pp.pug) teamrf,
+-- (select rf from _teamrf where team != pp.team and pug = pp.pug) opprf,
 
 (r.winner = pp.team) win
 
@@ -41,7 +37,7 @@ having pp.player in (select thisPP.player from pp thisPP where thisPP.pug = pp.p
                       group by thisPP.pug, thisPP.player
                       order by sum(totaltime) desc
                       limit 12)
-order by pp.player, r.id, pp.team;
+order by pp.player, pp.pug;
 create index if not exists pv_rp on playervitals (round, player);
 create index if not exists pv_pp on playervitals (pug, player);
 create index if not exists pv_pt on playervitals (pug, team);
