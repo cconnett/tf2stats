@@ -187,3 +187,17 @@ from _rf
 group by pug, team;
 --select * from _teamrf;
 --End range factor setup.
+
+-- Table of bonus rounds (extra phantom rounds added to pugs that go
+-- less than 9 rounds, to reward the model for being confident of
+-- lop-sided matches)
+drop table if exists _bonus_rounds;
+create table if not exists _bonus_rounds as
+select random() id, map, 'bonus' type, winner, begin, end, 'bonus' endreason, p.id pug from p where 1 <= 9 - redscore - bluescore
+union all
+select random() id, map, 'bonus' type, winner, begin, end, 'bonus' endreason, p.id pug from p where 2 <= 9 - redscore - bluescore
+union all
+select random() id, map, 'bonus' type, winner, begin, end, 'bonus' endreason, p.id pug from p where 3 <= 9 - redscore - bluescore
+union all
+select random() id, map, 'bonus' type, winner, begin, end, 'bonus' endreason, p.id pug from p where 4 <= 9 - redscore - bluescore
+order by pug;

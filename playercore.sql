@@ -29,9 +29,9 @@ NULL oppgwp,
 
 (r.winner = pp.team) win
 
-from pp join p on pp.pug = p.id
-left outer join rounds r on r.pug = pp.pug
-where r.type = 'normal' and pp.class != 'medic'
+from pp
+left outer join (select * from rounds union all select * from _bonus_rounds) r on r.pug = pp.pug
+where r.type in ('normal', 'bonus') and pp.class != 'medic'
 group by round, pp.player
 having pp.player in (select thisPP.player from pp thisPP where thisPP.pug = pp.pug
                       group by thisPP.pug, thisPP.player

@@ -38,7 +38,7 @@ coeffs = {
 }
 
 # Compute GWP
-read.execute('select distinct pug, player, kpm, dpm, teamgwp, oppgwp from playervitals')
+read.execute('select distinct pug, player, kpm, dpm, kdr, teamgwp, oppgwp from playervitals')
 while True:
     row = read.fetchone()
     if row is None:
