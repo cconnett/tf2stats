@@ -9,7 +9,7 @@ product = lambda seq: reduce(operator.mul, seq, 1)
 def sigmoid(x):
     return 1.0 / (1.0 + math.exp(-x))
 def logit(p):
-    return math.log((1-p)/p)
+    return math.log(p/(1-p))
 
 def removePlayerGWP(teamGWP, playerGWP, numPlayers=5):
     g = teamGWP
