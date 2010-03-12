@@ -17,6 +17,7 @@ select pp.pug pug, r.id round, pp.team team, pp.player player,
 NULL gwp,
 NULL teamgwp,
 NULL oppgwp,
+NULL adjustment,
 
 (select cast(k as float)/m from _playercore pc where pc.pug = pp.pug and pc.player = pp.player) kpm,
 (select cast(d as float)/m from _playercore pc where pc.pug = pp.pug and pc.player = pp.player) dpm,

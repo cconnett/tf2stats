@@ -28,41 +28,29 @@ limit 5"""
 opposite = {'Red': 'Blue', 'Blue': 'Red'}
 
 coeffs = {
-    'kpm': 0.65,
-    'dpm': -0.65,
+    'kpm': 0.623747,
+    'dpm': -0.656491,
     }
 
-if __name__ == '__main__':
-    conn = sqlite3.connect('/var/local/chris/pug.db')
-    conn.row_factory = sqlite3.Row
-    conn.create_function('sigmoid', 1, sigmoid)
-    conn.create_function('logit', 1, logit)
-
-    read = conn.cursor()
-    read2 = conn.cursor()
-    write = conn.cursor()
-    conn.executescript(file('setup.sql').read())
-    conn.executescript(file('playercore.sql').read())
-
-    # Compute GWP
+def computePlayerGWP(conn):
     read.execute('select distinct pug, player, kpm, dpm, teamgwp, oppgwp from playervitals')
     while True:
         row = read.fetchone()
         if row is None:
             break
 
-        logit = 0
+        l = 0
         for key in coeffs.keys():
             try:
-                logit += coeffs[key] * float(row[key])
+                l += coeffs[key] * float(row[key])
             except TypeError:
                 pass
 
         write.execute('update playervitals set gwp = ? where pug = ? and player = ?',
-                      (sigmoid(logit), row['pug'], row['player']))
+                      (sigmoid(l), row['pug'], row['player']))
     conn.commit()
 
-    # Compute actual Team GWPs
+def computeTeamGWP(conn):
     read.execute('select distinct pug, team from playervitals')
     while True:
         row = read.fetchone()
@@ -82,9 +70,30 @@ if __name__ == '__main__':
                       (row['pug'], row['team'], teamGWP))
     conn.commit()
 
-    # Compute player historical averages of Team GWP for teams they were
-    # on, and teams they opposed.
-    read.execute('select distinct pug, player from playervitals')
+
+if __name__ == '__main__':
+    conn = sqlite3.connect('/var/local/chris/pug.db')
+    conn.row_factory = sqlite3.Row
+    conn.create_function('sigmoid', 1, sigmoid)
+    conn.create_function('logit', 1, logit)
+    conn.create_function('removePlayerGWP', 2, removePlayerGWP)
+
+    read = conn.cursor()
+    read2 = conn.cursor()
+    write = conn.cursor()
+    conn.executescript(file('setup.sql').read())
+    conn.executescript(file('playercore.sql').read())
+
+    # Compute GWP from core stats and model coeffs
+    computePlayerGWP(conn)
+
+    # Compute actual Team GWPs
+    computeTeamGWP(conn)
+
+    # Compute player historical averages of Team GWP for teams they
+    # were on, and teams they opposed.  Adjust each player's own GWP
+    # for the strength of their teammates and opponents.
+    read.execute('select distinct pug, player, gwp from playervitals')
     while True:
         row = read.fetchone()
         if row is None:
@@ -105,6 +114,37 @@ if __name__ == '__main__':
          where player = ? and pv.pug != ?)''',
                       (row['player'], row['pug']))
         oppGWP = read2.fetchone()[0]
-        write.execute('update playervitals set teamgwp = ?, oppgwp = ? where pug = ? and player = ?',
-                      (teamGWP, oppGWP, row['pug'], row['player']))
+
+        adjustment = None
+        if teamGWP is not None and oppGWP is not None:
+            adjustment = -logit(removePlayerGWP(teamGWP, row['gwp'])) + logit(oppGWP)
+
+        write.execute('''update playervitals set teamgwp = ?, oppgwp = ?, adjustment = ?, gwp = ?
+        where pug = ? and player = ?''',
+                      (teamGWP, oppGWP, adjustment, sigmoid(logit(row['gwp']) + (adjustment or 0.0)),
+                       row['pug'], row['player']))
     conn.commit()
+
+    # Compute Team GWPs again, this time using adjusted player GWPs
+    computeTeamGWP(conn)
+
+    # Make the predictions
+    read.execute('''select teamGWPs.gwp teamwp, oppGWPs.gwp oppwp, win
+    from playervitals pv
+    join teams on teams.team = pv.team
+    join teamGWPs on teamGWPs.pug = pv.pug and teamGWPs.team = pv.team
+    join teamGWPs oppGWPs on oppGWPs.pug = pv.pug and oppGWPs.team = teams.opposite''')
+
+    n = 0
+    correct = 0
+    for row in read.fetchall():
+        teamwp = row['teamwp'] / (row['teamwp'] + row['oppwp'])
+
+        try:
+            correct += bool(int(row['win'])) == (teamwp > 0.5)
+        except TypeError:
+            pass
+        else:
+            n += 1
+    conn.commit()
+    print '%s of %s correct = %.1f%%' % (correct, n, 100*float(correct) / n)
