@@ -23,9 +23,7 @@ NULL oppgwp,
 (select cast(a as float)/m from _playercore pc where pc.pug = pp.pug and pc.player = pp.player) apm,
 (select cast(k as float)/d from _playercore pc where pc.pug = pp.pug and pc.player = pp.player) kdr,
 
--- (select rf from _rf where player = pp.player and pug = pp.pug) rf,
--- (select rf from _teamrf where team = pp.team and pug = pp.pug) teamrf,
--- (select rf from _teamrf where team != pp.team and pug = pp.pug) opprf,
+(select rf from _rf where player = pp.player and pug = pp.pug) rf,
 
 (r.winner = pp.team) win
 
