@@ -8,6 +8,15 @@ product = lambda seq: reduce(operator.mul, seq, 1)
 
 def sigmoid(x):
     return 1.0 / (1.0 + math.exp(-x))
+def logit(p):
+    return math.log((1-p)/p)
+
+def removePlayerGWP(teamGWP, playerGWP, numPlayers=5):
+    g = teamGWP
+    p = playerGWP
+    n = numPlayers
+    x = g / (2**n * (1-g) * p)
+    return x / (2**(1-n) + x)
 
 team_query = """select gwp from pp
 join playervitals pv on pv.pug = pp.pug and pv.player = pp.player
@@ -26,6 +35,8 @@ coeffs = {
 if __name__ == '__main__':
     conn = sqlite3.connect('/var/local/chris/pug.db')
     conn.row_factory = sqlite3.Row
+    conn.create_function('sigmoid', 1, sigmoid)
+    conn.create_function('logit', 1, logit)
 
     read = conn.cursor()
     read2 = conn.cursor()
