@@ -33,6 +33,9 @@ coeffs = {
     }
 
 def computePlayerGWP(conn):
+    read = conn.cursor()
+    write = conn.cursor()
+
     read.execute('select distinct pug, player, kpm, dpm, teamgwp, oppgwp from playervitals')
     while True:
         row = read.fetchone()
@@ -51,6 +54,10 @@ def computePlayerGWP(conn):
     conn.commit()
 
 def computeTeamGWP(conn):
+    read = conn.cursor()
+    read2 = conn.cursor()
+    write = conn.cursor()
+
     read.execute('select distinct pug, team from playervitals')
     while True:
         row = read.fetchone()
@@ -78,9 +85,6 @@ if __name__ == '__main__':
     conn.create_function('logit', 1, logit)
     conn.create_function('removePlayerGWP', 2, removePlayerGWP)
 
-    read = conn.cursor()
-    read2 = conn.cursor()
-    write = conn.cursor()
     conn.executescript(file('setup.sql').read())
     conn.executescript(file('playercore.sql').read())
 
@@ -93,6 +97,10 @@ if __name__ == '__main__':
     # Compute player historical averages of Team GWP for teams they
     # were on, and teams they opposed.  Adjust each player's own GWP
     # for the strength of their teammates and opponents.
+    read = conn.cursor()
+    read2 = conn.cursor()
+    write = conn.cursor()
+
     read.execute('select distinct pug, player, gwp from playervitals')
     while True:
         row = read.fetchone()
@@ -129,6 +137,7 @@ if __name__ == '__main__':
     computeTeamGWP(conn)
 
     # Make the predictions
+    read = conn.cursor()
     read.execute('''select teamGWPs.gwp teamwp, oppGWPs.gwp oppwp, win
     from playervitals pv
     join teams on teams.team = pv.team
