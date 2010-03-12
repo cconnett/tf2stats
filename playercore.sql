@@ -39,4 +39,4 @@ having pp.player in (select thisPP.player from pp thisPP where thisPP.pug = pp.p
 order by pp.player, pp.pug;
 create index if not exists pv_rp on playervitals (round, player);
 create index if not exists pv_pp on playervitals (pug, player);
-create index if not exists pv_pt on playervitals (pug, team);
+create index if not exists pv_pt on playervitals (player, pug, team);
