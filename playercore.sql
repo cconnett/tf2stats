@@ -7,8 +7,7 @@ select player, pug,
 from pp;
 create index _pc_pp on _playercore (player, pug);
 
-create table if not exists teamGWPs (pug int, team text, gwp float);
-create index if not exists tgwp_pt on teamGWPs (pug, team);
+create table if not exists teamGWPs (pug int, team text, gwp float, primary key (pug, team));
 
 drop table if exists playervitals;
 create table if not exists playervitals as
