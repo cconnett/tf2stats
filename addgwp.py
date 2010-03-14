@@ -141,15 +141,20 @@ if __name__ == '__main__':
     join teamLogits on teamLogits.pug = pv.pug and teamLogits.team = pv.team
     join teamLogits oppLogits on oppLogits.pug = pv.pug and oppLogits.team = teams.opposite''')
 
-    n = 0
-    correct = 0
+    n = [0] * 20
+    correct = [0] * 20
     for row in read.fetchall():
         teamwp = sigmoid(row['teamLogit'] - row['oppLogit'])
 
         try:
-            correct += bool(int(row['win'])) == (teamwp > 0.5)
+            correct[int(teamwp * 20)] += bool(int(row['win'])) == (teamwp > 0.5)
         except TypeError:
             pass
         else:
-            n += 1
-    print '%s of %s correct = %.1f%%' % (correct, n, 100*float(correct) / n)
+            n[int(teamwp * 20)] += 1
+    for i in range(10, 20):
+        try:
+            print '%.2f-%.2f: %s of %s correct = %.1f%%' % (float(i)/20, float(i+1)/20, correct[i], n[i], 100*float(correct[i]) / n[i])
+        except ZeroDivisionError:
+            pass
+    print '%s of %s correct = %.1f%%' % (sum(correct), sum(n), 100*float(sum(correct)) / sum(n))
