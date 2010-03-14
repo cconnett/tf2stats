@@ -7,15 +7,16 @@ select player, pug,
 from pp;
 create index _pc_pp on _playercore (player, pug);
 
-create table if not exists teamGWPs (pug int, team text, gwp float, primary key (pug, team));
+drop table if exists teamLogits;
+create table if not exists teamLogits (pug int, team text, logit float, primary key (pug, team));
 
 drop table if exists playervitals;
 create table if not exists playervitals as
 select pp.pug pug, r.id round, pp.team team, pp.player player,
 
-NULL gwp,
-NULL teamgwp,
-NULL oppgwp,
+NULL logit,
+NULL avgTeamLogit,
+NULL avgOppLogit,
 NULL adjustment,
 
 (select cast(k as float)/m from _playercore pc where pc.pug = pp.pug and pc.player = pp.player) kpm,

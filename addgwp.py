@@ -4,21 +4,12 @@ import math
 import sqlite3
 import operator
 
-product = lambda seq: reduce(operator.mul, seq, 1)
-
 def sigmoid(x):
     return 1.0 / (1.0 + math.exp(-x))
 def logit(p):
     return math.log(p/(1-p))
 
-def removePlayerGWP(teamGWP, playerGWP, numPlayers=5):
-    g = teamGWP
-    p = playerGWP
-    n = numPlayers
-    x = g / (2**n * (1-g) * p)
-    return x / (2**(1-n) + x)
-
-team_query = """select gwp from pp
+team_query = """select logit, coalesce(adjustment, 0.0) adjustment from pp
 join playervitals pv on pv.pug = pp.pug and pv.player = pp.player
 where class != 'medic' and pp.pug = ? and pp.team = ?
 group by pp.pug, pp.player
@@ -32,28 +23,32 @@ coeffs = {
     'dpm': -0.656491,
     }
 
-def computePlayerGWP(conn):
+def computePlayerPerformance(conn):
+    """Compute a player's raw performance based directly on their
+    in-game stats.  Store the logit of this in the database."""
     read = conn.cursor()
     write = conn.cursor()
 
-    read.execute('select distinct pug, player, kpm, dpm, teamgwp, oppgwp from playervitals')
+    read.execute('select distinct pug, player, kpm, dpm from playervitals')
     while True:
         row = read.fetchone()
         if row is None:
             break
 
-        l = 0
+        myLogit = 0
         for key in coeffs.keys():
             try:
-                l += coeffs[key] * float(row[key])
+                myLogit += coeffs[key] * float(row[key])
             except TypeError:
                 pass
 
-        write.execute('update playervitals set gwp = ? where pug = ? and player = ?',
-                      (sigmoid(l), row['pug'], row['player']))
+        write.execute('update playervitals set logit = ? where pug = ? and player = ?',
+                      (myLogit, row['pug'], row['player']))
     conn.commit()
 
-def computeTeamGWP(conn):
+def computeTeamLogits(conn):
+    """Sum the performance logits + adjustments of all the players on
+    each team and store the values in the teamLogits table."""
     read = conn.cursor()
     read2 = conn.cursor()
     write = conn.cursor()
@@ -65,89 +60,91 @@ def computeTeamGWP(conn):
             break
 
         read2.execute(team_query, (row['pug'], row['team']))
-        individualGWPs = [teammate['gwp'] for teammate in read2.fetchall()]
-        while len(individualGWPs) < 5:
-            individualGWPs.append(0.5)
-        rawTeamGWP = product(individualGWPs)
+        teamLogit = sum(teammate['logit'] + teammate['adjustment']
+                        for teammate in read2.fetchall())
 
-        neutralGWP = (0.5)**len(individualGWPs)
-        teamGWP = rawTeamGWP / (rawTeamGWP + neutralGWP)
-
-        write.execute('insert or replace into teamGWPs values (?, ?, ?)',
-                      (row['pug'], row['team'], teamGWP))
+        write.execute('insert or replace into teamLogits values (?, ?, ?)',
+                      (row['pug'], row['team'], teamLogit))
     conn.commit()
 
+def updatePlayerAdjustments(conn, numPlayers=5):
+    """Compute new adjustments to each players' raw performance logit
+    by accounting for the average strength of their teammates and
+    opponents."""
+    read = conn.cursor()
+    read2 = conn.cursor()
+    write = conn.cursor()
+
+    read.execute('select distinct pug, player, logit, coalesce(adjustment, 0.0) adjustment from playervitals')
+    while True:
+        row = read.fetchone()
+        if row is None:
+            break
+
+        myLogit = row['logit'] + row['adjustment']
+        read2.execute('''select count(*) nt, coalesce(avg(teamLogit), 0.0) from
+        (select distinct pv.pug, pv.team, teamLogits.logit teamLogit
+         from playervitals pv
+         join teamLogits on teamLogits.pug = pv.pug and teamLogits.team = pv.team
+         where player = ? and pv.pug != ?)''',
+                      (row['player'], row['pug']))
+        nt, avgTeamLogit, = read2.fetchone()
+        read2.execute('''select count(*) no, coalesce(avg(oppLogit), 0.0) from
+        (select distinct pv.pug, pv.team, teamLogits.logit oppLogit
+         from playervitals pv
+         join teams on teams.team = pv.team
+         join teamLogits on teamLogits.pug = pv.pug and teamLogits.team = teams.opposite
+         where player = ? and pv.pug != ?)''',
+                      (row['player'], row['pug']))
+        no, avgOppLogit, = read2.fetchone()
+
+        if no >= 2:
+            adjustment = avgOppLogit / numPlayers
+        else:
+            adjustment = 0.0
+
+        write.execute('''update playervitals set avgTeamLogit = ?, avgOppLogit = ?, adjustment = ?
+        where pug = ? and player = ?''',
+                      (avgTeamLogit, avgOppLogit, adjustment, row['pug'], row['player']))
+    conn.commit()
 
 if __name__ == '__main__':
     conn = sqlite3.connect('/var/local/chris/pug.db')
     conn.row_factory = sqlite3.Row
     conn.create_function('sigmoid', 1, sigmoid)
     conn.create_function('logit', 1, logit)
-    conn.create_function('removePlayerGWP', 2, removePlayerGWP)
 
     conn.executescript(file('setup.sql').read())
     conn.executescript(file('playercore.sql').read())
 
-    # Compute GWP from core stats and model coeffs
-    computePlayerGWP(conn)
+    # Compute player performance logit from core stats and model coeffs
+    computePlayerPerformance(conn)
 
-    # Compute actual Team GWPs
-    computeTeamGWP(conn)
+    # Compute actual Team Logits
+    computeTeamLogits(conn)
 
-    # Compute player historical averages of Team GWP for teams they
-    # were on, and teams they opposed.  Adjust each player's own GWP
-    # for the strength of their teammates and opponents.
-    read = conn.cursor()
-    read2 = conn.cursor()
-    write = conn.cursor()
+    # Compute per player historical averages of team logit for teams
+    # they were on and teams they opposed.  Store the adjustment value
+    # to each player's own logit for the strength of their teammates
+    # and opponents.
+    updatePlayerAdjustments(conn)
 
-    read.execute('select distinct pug, player, gwp from playervitals')
-    while True:
-        row = read.fetchone()
-        if row is None:
-            break
-
-        read2.execute('''select avg(gwp) from
-        (select distinct pv.pug, pv.team, teamGWPs.gwp gwp
-         from playervitals pv
-         join teamGWPs on teamGWPs.pug = pv.pug and teamGWPs.team = pv.team
-         where player = ? and pv.pug != ?)''',
-                      (row['player'], row['pug']))
-        teamGWP = read2.fetchone()[0]
-        read2.execute('''select avg(gwp) from
-        (select distinct pv.pug, pv.team, teamGWPs.gwp gwp
-         from playervitals pv
-         join teams on teams.team = pv.team
-         join teamGWPs on teamGWPs.pug = pv.pug and teamGWPs.team = teams.opposite
-         where player = ? and pv.pug != ?)''',
-                      (row['player'], row['pug']))
-        oppGWP = read2.fetchone()[0]
-
-        adjustment = None
-        if teamGWP is not None and oppGWP is not None:
-            adjustment = -logit(removePlayerGWP(teamGWP, row['gwp'])) + logit(oppGWP)
-
-        write.execute('''update playervitals set teamgwp = ?, oppgwp = ?, adjustment = ?, gwp = ?
-        where pug = ? and player = ?''',
-                      (teamGWP, oppGWP, adjustment, sigmoid(logit(row['gwp']) + (adjustment or 0.0)),
-                       row['pug'], row['player']))
-    conn.commit()
-
-    # Compute Team GWPs again, this time using adjusted player GWPs
-    computeTeamGWP(conn)
+    # Compute team logits again, this time using the latest
+    # adjustments to players' logits.
+    computeTeamLogits(conn)
 
     # Make the predictions
     read = conn.cursor()
-    read.execute('''select teamGWPs.gwp teamwp, oppGWPs.gwp oppwp, win
+    read.execute('''select teamLogits.logit teamLogit, oppLogits.logit oppLogit, win
     from playervitals pv
     join teams on teams.team = pv.team
-    join teamGWPs on teamGWPs.pug = pv.pug and teamGWPs.team = pv.team
-    join teamGWPs oppGWPs on oppGWPs.pug = pv.pug and oppGWPs.team = teams.opposite''')
+    join teamLogits on teamLogits.pug = pv.pug and teamLogits.team = pv.team
+    join teamLogits oppLogits on oppLogits.pug = pv.pug and oppLogits.team = teams.opposite''')
 
     n = 0
     correct = 0
     for row in read.fetchall():
-        teamwp = row['teamwp'] / (row['teamwp'] + row['oppwp'])
+        teamwp = sigmoid(row['teamLogit'] - row['oppLogit'])
 
         try:
             correct += bool(int(row['win'])) == (teamwp > 0.5)
@@ -155,5 +152,4 @@ if __name__ == '__main__':
             pass
         else:
             n += 1
-    conn.commit()
     print '%s of %s correct = %.1f%%' % (correct, n, 100*float(correct) / n)
