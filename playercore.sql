@@ -12,7 +12,7 @@ create table if not exists teamLogits (pug int, team text, logit float, primary 
 
 drop table if exists playervitals;
 create table if not exists playervitals as
-select pp.pug pug, r.id round, pp.team team, pp.player player,
+select pp.pug pug, pp.team team, pp.player player,
 
 NULL logit,
 NULL avgTeamLogit,
@@ -31,8 +31,7 @@ NULL adjustment,
 from pp
 left outer join (select * from rounds union all select * from _bonus_rounds) r on r.pug = pp.pug
 where r.type in ('normal', 'bonus') and pp.class != 'medic'
-group by round, pp.player
-having pp.player in (select thisPP.player from pp thisPP where thisPP.pug = pp.pug
+and pp.player in (select thisPP.player from pp thisPP where thisPP.pug = pp.pug
                       group by thisPP.pug, thisPP.player
                       order by sum(totaltime) desc
                       limit 12)
