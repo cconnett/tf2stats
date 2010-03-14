@@ -76,6 +76,7 @@ def updatePlayerAdjustments(conn, numPlayers=5):
     write = conn.cursor()
 
     read.execute('select distinct pug, player, logit, coalesce(adjustment, 0.0) adjustment from playervitals')
+    maxDelta = 0.0
     while True:
         row = read.fetchone()
         if row is None:
@@ -102,11 +103,13 @@ def updatePlayerAdjustments(conn, numPlayers=5):
             adjustment = avgOppLogit / numPlayers
         else:
             adjustment = 0.0
+        maxDelta = max(maxDelta, abs(adjustment - row['adjustment']))
 
         write.execute('''update playervitals set avgTeamLogit = ?, avgOppLogit = ?, adjustment = ?
         where pug = ? and player = ?''',
                       (avgTeamLogit, avgOppLogit, adjustment, row['pug'], row['player']))
     conn.commit()
+    return maxDelta
 
 def makePredictions(conn):
     read = conn.cursor()
@@ -150,15 +153,19 @@ if __name__ == '__main__':
     # Compute actual Team Logits
     computeTeamLogits(conn)
 
-    # Compute per player historical averages of team logit for teams
-    # they were on and teams they opposed.  Store the adjustment value
-    # to each player's own logit for the strength of their teammates
-    # and opponents.
-    updatePlayerAdjustments(conn)
+    maxDelta = 1.0
+    # Until the system converges:
+    while maxDelta > 1e-3:
+        # Compute per player historical averages of team logit for
+        # teams they were on and teams they opposed.  Store the
+        # adjustment value to each player's own logit for the strength
+        # of their teammates and opponents.
+        maxDelta = updatePlayerAdjustments(conn)
+        print '{0:.1e}'.format(maxDelta)
 
-    # Compute team logits again, this time using the latest
-    # adjustments to players' logits.
-    computeTeamLogits(conn)
+        # Compute team logits again, this time using the latest
+        # adjustments to players' logits.
+        computeTeamLogits(conn)
 
     # Make the predictions
     makePredictions(conn)
