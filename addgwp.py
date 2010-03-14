@@ -132,10 +132,12 @@ def makePredictions(conn):
             n[int(teamwp * 20)] += 1
     for i in range(10, 20):
         try:
-            print '%.2f-%.2f: %s of %s correct = %.1f%%' % (float(i)/20, float(i+1)/20, correct[i], n[i], 100*float(correct[i]) / n[i])
+            print '{0:.2f}-{1:.2f}: {2} of {3} correct = {4:.1f}%'.format(
+                float(i)/20, float(i+1)/20, correct[i], n[i], 100*float(correct[i]) / n[i])
         except ZeroDivisionError:
             pass
-    print '%s of %s correct = %.1f%%' % (sum(correct), sum(n), 100*float(sum(correct)) / sum(n))
+    print '{0} of {1} correct = {2:.1f}%'.format(
+        sum(correct), sum(n), 100*float(sum(correct)) / sum(n))
 
 
 if __name__ == '__main__':
